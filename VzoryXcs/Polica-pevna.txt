@@ -1,0 +1,29 @@
+Polica-pevna
+
+Parametre pre UI:
+Od prednej hrany = 30
+Pocet kolikov = 4
+Roztec kolikov = 128
+Od spodu = 200
+
+Polica
+SelectWorkplane("Right");
+SetReferencePosition(0);
+CreatePattern(1,4,32.00,128.00,0,90);
+CreateDrill("KolikRH",30.00,9.00,23.00,8.00,"",TypeOfProcess.Drilling,"E071","-1",3,-1,-1,"-1");
+SelectWorkplane("Left");
+SetReferencePosition(2);
+CreatePattern(1,4,32.00,128.00,0,90);
+CreateDrill("KolikLH",30.00,9.00,23.00,8.00,"",TypeOfProcess.Drilling,"E071","-1",3,-1,-1,"-1");
+
+Bok L
+SelectWorkplane("Top");
+SetReferencePosition(2);
+CreatePattern(4,1,128.00,32.00,0,90);
+CreateDrill("KolikPolica1",200.00,30.00,12.00,8.00,"",TypeOfProcess.Drilling,"E071","-1",3,-1,-1,"-1");
+
+Bok P
+SelectWorkplane("Top");
+SetReferencePosition(0);
+CreatePattern(4,1,128.00,32.00,0,90);
+CreateDrill("KolikPolica1",200.00,30.00,12.00,8.00,"",TypeOfProcess.Drilling,"E071","-1",3,-1,-1,"-1");

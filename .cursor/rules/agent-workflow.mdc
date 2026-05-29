@@ -1,0 +1,25 @@
+---
+description: Ako má agent pracovať v tomto projekte
+alwaysApply: true
+---
+
+# Agent workflow
+
+## Pred zásahom do kódu
+
+Pred úpravou súborov vždy stručne vysvetli:
+
+1. **Čo** sa ide meniť (súbory, triedy, správanie).
+2. **Ako** sa to ide meniť (prístup, kroky, alternatívy ak sú relevantné).
+3. **Dopady** na kód (čo sa môže rozbiť, čo treba otestovať, vedľajšie efekty na import, operácie, XCS, UI).
+
+Až potom začni s úpravami. Pri veľkej zmene rozdeľ vysvetlenie a implementáciu; pri drobnej oprave stačí 2–3 vety.
+
+## Všeobecné
+
+- Minimálny rozsah zmien: rieš len to, čo user požiadal; nerefaktoruj okolie.
+- Pred zmenou si prečítaj existujúci kód v danej oblasti a drž sa jeho štýlu.
+- Nepridávaj nové súbory (dokumentácia, testy, helpery) bez explicitnej požiadavky.
+- Commity a push rob len na explicitnú požiadavku usera.
+- Odpovede userovi píš po slovensky; UI texty v aplikácii tiež po slovensky.
+- Ak je úloha v `NEDOLADENE.md` označená ako backlog, nezačínaj ju doladiť, pokiaľ user nevyžiadal inú prioritu.

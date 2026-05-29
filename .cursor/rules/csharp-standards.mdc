@@ -1,0 +1,34 @@
+---
+description: C# štandardy pre MaestroGenratorXcs
+globs: **/*.cs
+alwaysApply: false
+---
+
+# C# – zakázané a preferované
+
+## Stav a globály
+
+- **Nepridávaj** static mutable polia (globálny / zdieľaný stav aplikácie).
+- **Nepridávaj** singletony s mutable stavom.
+- Stav drž v instanciách (ViewModel, služby, dielce, operácie) a odovzdávaj explicitne parametrami.
+- `private static` pomocné metódy a `private static readonly` konštanty/brush v rendereri sú OK — neprepisuj ich na inštancie bez dôvodu.
+
+## Architektúra projektu
+
+- **ViewModels** (`ViewModels/`) – logika UI, binding, príkazy (CommunityToolkit.Mvvm).
+- **Views** (`Views/`, `MainWindow`) – len UI; žiadna obchodná logika importu/XCS.
+- **Operations** (`Operations/`) – dediči od `CncOperation`; mapovanie na XCS cez existujúce builder API.
+- **Services** (`Services/`) – propagácia, mapovanie workplane, import.
+- **Domain** – model dielca, zostavy, spojení; bez WPF závislostí.
+
+## Operácie a XCS
+
+- Nové typy operácií: rozšír `CncOperation` + existujúci export pattern (ako `DrillOperation`, `ObehOperation`).
+- Pri zmene drill propagácie/mapovania kontroluj `OperationPropagator` a `WorkplaneMapper`.
+- Nerefaktoruj heuristiky importu (`ExcelImporter`, `PartTypeHinter`), ak user nežiada import.
+
+## Kód
+
+- Preferuj `sealed` triedy tam, kde sa nededí.
+- Verejné API dokumentuj len tam, kde to už robí projekt (`///` pri operáciách).
+- Nepridávaj prázdne `catch` bloky.

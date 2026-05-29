@@ -1,0 +1,13 @@
+---
+description: WPF a UI konvencie
+globs: **/*.{xaml,cs}
+alwaysApply: false
+---
+
+# WPF
+
+- Logiku z code-behind presuň do ViewModelu, ak to nie je čisto view (focus, animácia, dialog result).
+- Editácia operácií v UI: vzor z `DrillOperation` / `OperationsPanel` – nerozširuj na iné typy operácií, pokiaľ user nevyžiadal konkrétny typ.
+- Vypnuté ribbon tlačidlá (Skrutky, Drážka, Kovania) **neimplementuj** bez explicitnej požiadavky.
+- Tmavý title bar: používaj `WindowThemeHelper.ApplyDarkTitleBar` – nevymýšľaj nový prístup k title baru.
+- Po zmene UI over build (`dotnet build`), ak user pracuje na WPF časti.
