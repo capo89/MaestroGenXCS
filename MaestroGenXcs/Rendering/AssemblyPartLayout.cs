@@ -25,25 +25,57 @@ public static class AssemblyPartLayout
         };
     }
 
-    public static PartFace ResolveContactFace(PartKind referenceBokKind, PartKind partKind, PartFace anchorFace) =>
-        anchorFace is PartFace.Top or PartFace.Bottom
+    public static PartFace ResolveContactFace(PartKind referenceBokKind, PartKind partKind, PartFace anchorFace)
+    {
+        if (UsesVlozenyAssemblyPlacement(partKind))
+            return PartFace.Top;
+
+        return anchorFace is PartFace.Top or PartFace.Bottom
             ? GetContactFaceToReferenceBokTop(referenceBokKind, partKind)
             : anchorFace;
+    }
 
     public static Transform3D BuildPlacementTransform(
         AssemblyPlacement placement,
-        PartKind referenceBokKind,
-        double refDz)
+        Part referenceBok)
     {
+        if (UsesVlozenyAssemblyPlacement(placement.Part.Kind))
+            return BuildVlozenyPlacementTransform(placement, referenceBok);
+
         var part = placement.Part;
-        var contact = ResolveContactFace(referenceBokKind, part.Kind, placement.AnchorFace);
+        var contact = ResolveContactFace(referenceBok.Kind, part.Kind, placement.AnchorFace);
 
         var group = new Transform3DGroup();
         group.Children.Add(CreateContactFaceRotation(contact));
         group.Children.Add(new TranslateTransform3D(AlignmentAfterRotation(part, contact)));
-        group.Children.Add(new TranslateTransform3D(placement.OffsetY, placement.OffsetDepthMm, refDz));
+        group.Children.Add(new TranslateTransform3D(placement.OffsetY, placement.OffsetDepthMm, referenceBok.Dz));
         return group;
     }
+
+    /// <summary>
+    /// Vložené dno/vrch: panel je otočený tak, aby Top plocha (s kolíkmi) smerovala k hrane boku.
+    /// </summary>
+    private static Transform3D BuildVlozenyPlacementTransform(AssemblyPlacement placement, Part referenceBok)
+    {
+        var part = placement.Part;
+        var originX = VlozenyDefaultOffsetX(part, referenceBok);
+        var originZ = referenceBok.Dz;
+
+        var group = new Transform3DGroup();
+        group.Children.Add(CreateContactFaceRotation(PartFace.Left));
+        group.Children.Add(new TranslateTransform3D(AlignmentAfterRotation(part, PartFace.Left)));
+        group.Children.Add(new TranslateTransform3D(originX, placement.OffsetDepthMm, originZ));
+        return group;
+    }
+
+    /// <summary>Predvolená X (OffsetY) pre vložené dno/vrch voči referenčnému boku.</summary>
+    public static double VlozenyDefaultOffsetX(Part part, Part referenceBok) =>
+        referenceBok.Kind switch
+        {
+            PartKind.BokL => referenceBok.Dx - part.Dz,
+            PartKind.BokP => -part.Dz,
+            _ => referenceBok.Dx - part.Dz
+        };
 
     /// <summary>Obrys kontaktnej plochy v lokálnych súradniciach dielca (rovnaká konvencia ako <see cref="Scene3DBuilder"/>).</summary>
     public static IReadOnlyList<Point3D> GetContactFaceOutline(Part part, PartFace contactFace)
@@ -134,4 +166,7 @@ public static class AssemblyPartLayout
 
     private static PartFace GetContactFaceToReferenceBokTop(PartKind referenceBokKind, PartKind partKind) =>
         ConnectionMap.GetContactFaceToReferenceBokTop(referenceBokKind, partKind);
+
+    private static bool UsesVlozenyAssemblyPlacement(PartKind partKind) =>
+        partKind is PartKind.Dno or PartKind.Vrch;
 }

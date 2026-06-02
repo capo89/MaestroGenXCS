@@ -447,6 +447,10 @@ public sealed class Scene3DBuilder
         };
     }
 
+    /// <summary>Použitie mimo tejto triedy (napr. 3D skladanie zostavy) pre tvorbu vizuálu z hintu.</summary>
+    public static Visual3D? CreateVisualFromHint(VisualHint hint, double dx, double dy, double dz) =>
+        MaterializeHint(hint, dx, dy, dz);
+
     private static Visual3D BuildHole(HoleHint h, double dx, double dy, double dz)
     {
         // Otvor zobrazujeme ako valec posunutý "do dosky" smerom kolmo

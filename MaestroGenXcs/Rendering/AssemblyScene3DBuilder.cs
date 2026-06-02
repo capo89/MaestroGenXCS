@@ -33,6 +33,8 @@ public sealed class AssemblyScene3DBuilder
 
         foreach (var v in BuildPart(refBok, null, ReferenceBrush, false, PartFace.Top))
             yield return v;
+        foreach (var v in BuildOperationVisuals(refBok, null))
+            yield return v;
 
         foreach (var placement in ctx.Placements.Where(p => p.IsPlacedInScene))
         {
@@ -40,15 +42,12 @@ public sealed class AssemblyScene3DBuilder
             var brush = isSel ? SelectedBrush : PlacedBrush;
             var contact = AssemblyPartLayout.ResolveContactFace(
                 refKind, placement.Part.Kind, placement.AnchorFace);
-            var transform = AssemblyPartLayout.BuildPlacementTransform(placement, refKind, refDz);
+            var transform = AssemblyPartLayout.BuildPlacementTransform(placement, refBok);
             foreach (var v in BuildPart(placement.Part, transform, brush, isSel, contact))
                 yield return v;
+            foreach (var v in BuildOperationVisuals(placement.Part, transform))
+                yield return v;
 
-            if (isSel)
-            {
-                foreach (var v in BuildBokTopContactOutline(refBok, placement, contact, refDz))
-                    yield return v;
-            }
         }
 
         foreach (var guide in BuildGuideLines(dx, dy, refDz + 0.8, guideX, guideY))
@@ -103,34 +102,24 @@ public sealed class AssemblyScene3DBuilder
         yield return Wrap(outline, transform);
     }
 
-    private static IEnumerable<Visual3D> BuildBokTopContactOutline(
-        Part refBok,
-        AssemblyPlacement placement,
-        PartFace contactFace,
-        double refDz)
+    private static IEnumerable<Visual3D> BuildOperationVisuals(Part part, Transform3D? transform)
     {
-        var (footX, footY) = AssemblyPartLayout.GetFootprintOnBokTop(placement.Part, contactFace);
-        var ox = placement.OffsetY;
-        var oy = placement.OffsetDepthMm;
-        const double z = 0.4;
-        var zTop = refDz + z;
+        var dx = Math.Max(1, part.Dx);
+        var dy = Math.Max(1, part.Dy);
+        var dz = Math.Max(1, part.Dz);
 
-        var corners = new[]
+        foreach (var op in part.Operations)
         {
-            new Point3D(ox, oy, zTop),
-            new Point3D(ox + footX, oy, zTop),
-            new Point3D(ox + footX, oy + footY, zTop),
-            new Point3D(ox, oy + footY, zTop),
-        };
+            if (!op.IsEnabled)
+                continue;
 
-        var outline = new LinesVisual3D { Color = Colors.White, Thickness = 2.5 };
-        for (var i = 0; i < 4; i++)
-        {
-            outline.Points.Add(corners[i]);
-            outline.Points.Add(corners[(i + 1) % 4]);
+            foreach (var hint in op.BuildVisualHints(dx, dy, dz))
+            {
+                var visual = Scene3DBuilder.CreateVisualFromHint(hint, dx, dy, dz);
+                if (visual != null)
+                    yield return Wrap(visual, transform);
+            }
         }
-
-        yield return outline;
     }
 
     private static IEnumerable<Visual3D> BuildGuideLines(

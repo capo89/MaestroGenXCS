@@ -39,9 +39,9 @@ public static class ConnectionMap
 
         // ── Naložené / polica / priečka – v mape, propagácia z Kolíkov zatiaľ vypnutá ─
         new(PartKind.BokL, PartFace.Top, 2, PartKind.Dno, PartFace.Left,  2,
-            Note: "naložené", PropagateOnUserDrill: false),
+            Note: "naložené"),
         new(PartKind.BokP, PartFace.Top, 0, PartKind.Dno, PartFace.Right, 0,
-            Note: "naložené", PropagateOnUserDrill: false),
+            Note: "naložené"),
         new(PartKind.BokL, PartFace.Top, 0, PartKind.Vrch, PartFace.Right, 0,
             Note: "naložené", PropagateOnUserDrill: false),
         new(PartKind.BokP, PartFace.Top, 2, PartKind.Vrch, PartFace.Left,  2,
