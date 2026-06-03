@@ -560,6 +560,9 @@ public partial class AssemblyKolikyDialog : Window
         { error = (_isEdge ? "Prvý kolík (poloha): " : "Prvý kolík X: ") + error; return false; }
         if (!TryNumber(YStartBox.Text, out var yStart, out error)) { error = "Prvý kolík Y: " + error; return false; }
 
+        if (_isEdge && _part != null)
+            yStart = DefaultEdgeY;
+
         if (_isEdge && _edgePatternAlongCountY)
         {
             nRows = nCols;

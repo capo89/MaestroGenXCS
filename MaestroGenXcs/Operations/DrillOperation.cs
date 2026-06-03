@@ -80,14 +80,21 @@ public sealed partial class DrillOperation : CncOperation
         ? "Vŕtanie"
         : $"Vŕtanie · {TemplateLabel}";
 
+    public static bool IsEdgeFace(PartFace face) =>
+        face is PartFace.Left or PartFace.Right or PartFace.Front or PartFace.Back;
+
+    /// <summary>Stred hrúbky dielca pre vrtanie do hrany (Left/Right/Front/Back).</summary>
+    public static double CenterThicknessMm(double dz) =>
+        Math.Round(Math.Max(1, dz) / 2.0, 3);
+
     public override string ToXcs(MaestroContext ctx)
     {
-        _ = ctx;
+        var yStart = IsEdgeFace(Face) ? CenterThicknessMm(ctx.BoxThickness) : YStart;
         return MaestroXcsBuilder.DrillPattern(
             countX: CountX,
             countY: CountY,
             xStart: XStart,
-            yStart: YStart,
+            yStart: yStart,
             pitchX: PitchX,
             pitchY: PitchY,
             diameter: Diameter,
@@ -115,7 +122,7 @@ public sealed partial class DrillOperation : CncOperation
 
     public override IEnumerable<VisualHint> BuildVisualHints(double dx, double dy, double dz)
     {
-        if (Face is PartFace.Left or PartFace.Right or PartFace.Front or PartFace.Back)
+        if (IsEdgeFace(Face))
         {
             foreach (var (wx, wy) in EnumerateEdgeTopViewPoints(dx, dy, dz))
             {
@@ -154,7 +161,7 @@ public sealed partial class DrillOperation : CncOperation
     /// </summary>
     private IEnumerable<(double X, double Y)> EnumerateEdgeTopViewPoints(double dx, double dy, double dz)
     {
-        _ = dz;
+        var thicknessCenter = CenterThicknessMm(dz);
         var alongCount = CountY > 1 && CountX == 1 ? CountY : CountX;
         var alongPitch = CountY > 1 && CountX == 1 ? PitchY : PitchX;
 
@@ -165,10 +172,10 @@ public sealed partial class DrillOperation : CncOperation
 
             yield return Face switch
             {
-                PartFace.Left or PartFace.Right => (fromPredna, YStart),
-                PartFace.Front => (RefPos is 2 or 3 ? dx - along : along, YStart),
-                PartFace.Back => (RefPos is 1 or 3 ? dx - along : along, YStart),
-                _ => (fromPredna, YStart)
+                PartFace.Left or PartFace.Right => (fromPredna, thicknessCenter),
+                PartFace.Front => (RefPos is 2 or 3 ? dx - along : along, thicknessCenter),
+                PartFace.Back => (RefPos is 1 or 3 ? dx - along : along, thicknessCenter),
+                _ => (fromPredna, thicknessCenter)
             };
         }
     }

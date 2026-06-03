@@ -41,8 +41,8 @@ public sealed class AssemblyScene3DBuilder
             var isSel = ReferenceEquals(placement.Part, selectedPart);
             var brush = isSel ? SelectedBrush : PlacedBrush;
             var contact = AssemblyPartLayout.ResolveContactFace(
-                refKind, placement.Part.Kind, placement.AnchorFace);
-            var transform = AssemblyPartLayout.BuildPlacementTransform(placement, refBok);
+                refKind, placement.Part.Kind, placement.AnchorFace, ctx.CorpusMode);
+            var transform = AssemblyPartLayout.BuildPlacementTransform(placement, refBok, ctx.CorpusMode);
             foreach (var v in BuildPart(placement.Part, transform, brush, isSel, contact))
                 yield return v;
             foreach (var v in BuildOperationVisuals(placement.Part, transform))

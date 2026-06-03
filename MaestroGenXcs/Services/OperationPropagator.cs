@@ -220,7 +220,7 @@ public sealed class OperationPropagator
             return;
 
         var mirror = WorkplaneMapper.MapDrillPattern(
-            src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates);
+            src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates, target.Dz);
         target.Operations.Add(mirror);
         StatusMessage?.Invoke(this, $"Operácia premietnutá na {target.Name} ({targetFace}).");
     }
@@ -265,6 +265,9 @@ public sealed class OperationPropagator
         var owner = FindOwner(src);
         if (owner == null) return;
 
+        if (DrillOperation.IsEdgeFace(src.Face))
+            src.YStart = DrillOperation.CenterThicknessMm(owner.Dz);
+
         if (src.IsTraverzaMaster)
         {
             TraverzaKolikyApplier.RefreshMirrors(_store, src);
@@ -293,12 +296,16 @@ public sealed class OperationPropagator
                 .FirstOrDefault(o => GetRootSourceId(o) == rootId && o.SourceConnectionId == conn.Id);
 
             var fresh = WorkplaneMapper.MapDrillPattern(
-                src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates);
+                src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates, target.Dz);
 
             if (existing == null)
                 target.Operations.Add(fresh);
             else
+            {
                 CopyDrillState(fresh, existing);
+                if (DrillOperation.IsEdgeFace(existing.Face))
+                    existing.YStart = DrillOperation.CenterThicknessMm(target.Dz);
+            }
         }
     }
 

@@ -23,29 +23,37 @@ public static class ConnectionMap
         bool PropagateOnUserDrill = true,
         /// <summary>True = x/y bez výmeny osí (Top↔Top výška police medzi bokmi).</summary>
         bool IdentityCoordinates = false,
-        bool RequiresOppositeBokOptIn = false);
+        bool RequiresOppositeBokOptIn = false,
+        /// <summary>null = platí v oboch režimoch korpusu; inak len pre daný režim (dno/vrch ↔ bok).</summary>
+        AssemblyCorpusMode? CorpusModeOnly = null);
 
     private static readonly IReadOnlyList<Rule> Rules = BuildRules();
 
     private static Rule[] BuildRules() =>
     [
-        // ── Dno ↔ Boky (vložené) ───────────────────────────────────────────────
-        new(PartKind.BokL, PartFace.Right, 0, PartKind.Dno, PartFace.Top, 0, Note: "vložené"),
-        new(PartKind.BokP, PartFace.Left,  2, PartKind.Dno, PartFace.Top, 2, Note: "vložené"),
+        // ── Dno ↔ Boky (vložené mapa – korpus Bok vložený) ─────────────────────
+        new(PartKind.BokL, PartFace.Right, 0, PartKind.Dno, PartFace.Top, 0,
+            Note: "vložené", CorpusModeOnly: AssemblyCorpusMode.BokVlozeny),
+        new(PartKind.BokP, PartFace.Left,  2, PartKind.Dno, PartFace.Top, 2,
+            Note: "vložené", CorpusModeOnly: AssemblyCorpusMode.BokVlozeny),
 
         // ── Vrch ↔ Boky (vložené) ───────────────────────────────────────────────
-        new(PartKind.BokL, PartFace.Left,  2, PartKind.Vrch, PartFace.Top, 2, Note: "vložené"),
-        new(PartKind.BokP, PartFace.Right, 0, PartKind.Vrch, PartFace.Top, 0, Note: "vložené"),
+        new(PartKind.BokL, PartFace.Left,  2, PartKind.Vrch, PartFace.Top, 2,
+            Note: "vložené", CorpusModeOnly: AssemblyCorpusMode.BokVlozeny),
+        new(PartKind.BokP, PartFace.Right, 0, PartKind.Vrch, PartFace.Top, 0,
+            Note: "vložené", CorpusModeOnly: AssemblyCorpusMode.BokVlozeny),
 
-        // ── Naložené / polica / priečka – v mape, propagácia z Kolíkov zatiaľ vypnutá ─
+        // ── Dno/Vrch ↔ Boky (naložené mapa – korpus Bok nalozený) ───────────────
         new(PartKind.BokL, PartFace.Top, 2, PartKind.Dno, PartFace.Left,  2,
-            Note: "naložené"),
+            Note: "naložené", CorpusModeOnly: AssemblyCorpusMode.BokNalozeny),
         new(PartKind.BokP, PartFace.Top, 0, PartKind.Dno, PartFace.Right, 0,
-            Note: "naložené"),
+            Note: "naložené", CorpusModeOnly: AssemblyCorpusMode.BokNalozeny),
         new(PartKind.BokL, PartFace.Top, 0, PartKind.Vrch, PartFace.Right, 0,
-            Note: "naložené"),
+            Note: "naložené", CorpusModeOnly: AssemblyCorpusMode.BokNalozeny),
         new(PartKind.BokP, PartFace.Top, 2, PartKind.Vrch, PartFace.Left,  2,
-            Note: "naložené"),
+            Note: "naložené", CorpusModeOnly: AssemblyCorpusMode.BokNalozeny),
+
+        // ── Polica / priečka (Top boku – oba režimy) ────────────────────────────
         new(PartKind.BokL, PartFace.Top, 2, PartKind.Priecka, PartFace.Left,  2,
             Note: "naložené"),
         new(PartKind.BokP, PartFace.Top, 0, PartKind.Priecka, PartFace.Right, 0,
@@ -66,13 +74,23 @@ public static class ConnectionMap
             Note: "bok↔bok", RequiresOppositeBokOptIn: true),
     ];
 
+    private static bool RuleApplies(Rule rule, AssemblyCorpusMode mode) =>
+        rule.CorpusModeOnly is null || rule.CorpusModeOnly == mode;
+
     /// <summary>
-    /// Kontaktná plocha dielca voči <see cref="PartFace.Top"/> referenčného boku (pravidlá „naložené“ / polica).
+    /// Kontaktná plocha dielca voči <see cref="PartFace.Top"/> referenčného boku.
     /// </summary>
-    public static PartFace GetContactFaceToReferenceBokTop(PartKind referenceBokKind, PartKind partKind)
+    public static PartFace GetContactFaceToReferenceBokTop(
+        PartKind referenceBokKind,
+        PartKind partKind,
+        AssemblyCorpusMode corpusMode)
     {
+        if (UsesVlozenyDnoVrchPlacement(partKind, corpusMode))
+            return PartFace.Top;
+
         var rule = Rules.FirstOrDefault(r =>
-            r.FromKind == referenceBokKind
+            RuleApplies(r, corpusMode)
+            && r.FromKind == referenceBokKind
             && r.FromFace == PartFace.Top
             && r.ToKind == partKind);
 
@@ -86,13 +104,23 @@ public static class ConnectionMap
         };
     }
 
-    public static IEnumerable<Connection> GenerateConnections(IEnumerable<Part> parts)
+    public static bool UsesVlozenyDnoVrchPlacement(PartKind partKind, AssemblyCorpusMode corpusMode) =>
+        corpusMode == AssemblyCorpusMode.BokVlozeny
+        && partKind is PartKind.Dno or PartKind.Vrch;
+
+    public static IEnumerable<Connection> GenerateConnections(
+        IEnumerable<Part> parts,
+        Func<string, AssemblyCorpusMode>? getCorpusMode = null)
     {
+        getCorpusMode ??= _ => AssemblyCorpusMode.BokVlozeny;
+
         var byZostava = parts.GroupBy(p => p.Zostava ?? "");
         foreach (var grp in byZostava)
         {
             var members = grp.ToList();
-            foreach (var rule in Rules)
+            var mode = getCorpusMode(grp.Key);
+
+            foreach (var rule in Rules.Where(r => RuleApplies(r, mode)))
             {
                 var sources = members.Where(p => p.Kind == rule.FromKind).ToList();
                 var targets = members.Where(p => p.Kind == rule.ToKind).ToList();

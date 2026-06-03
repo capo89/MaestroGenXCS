@@ -169,6 +169,19 @@
 
                             </TextBlock>
 
+                            <StackPanel Margin="0,8,0,0"
+                                        IsEnabled="{Binding HasSelectedZostava}">
+
+                                <TextBlock Text="Režim korpusu" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+                                <ComboBox ItemsSource="{Binding CorpusModeChoices}"
+                                          SelectedValue="{Binding SelectedCorpusMode}"
+                                          SelectedValuePath="Mode"
+                                          DisplayMemberPath="Label"
+                                          Padding="6,4"/>
+
+                            </StackPanel>
+
                             <StackPanel Visibility="{Binding HasSelectedPlacement, Converter={StaticResource BoolToVis}}">
 
                                 <TextBlock Text="Výška umiestnenia (mm, od spodu)" FontWeight="SemiBold" Margin="0,0,0,4"/>

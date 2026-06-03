@@ -16,6 +16,23 @@ public sealed class AssemblyStore
         return _byZostava.GetValueOrDefault(zostava);
     }
 
+    public AssemblyCorpusMode GetCorpusMode(string? zostava) =>
+        GetContext(zostava)?.CorpusMode ?? AssemblyCorpusMode.BokVlozeny;
+
+    /// <summary>Po zmene <see cref="AssemblyContext.CorpusMode"/> – kontaktné plochy a default offsety.</summary>
+    public void ApplyCorpusModeToPlacements(AssemblyContext ctx)
+    {
+        if (ctx.ReferenceBok == null)
+            return;
+
+        foreach (var placement in ctx.Placements)
+        {
+            placement.AnchorFace = ConnectionMap.GetContactFaceToReferenceBokTop(
+                ctx.ReferenceBok.Kind, placement.Part.Kind, ctx.CorpusMode);
+            placement.OffsetY = DefaultOffsetX(placement.Part, ctx.ReferenceBok, ctx.CorpusMode);
+        }
+    }
+
     /// <summary>Po <see cref="PartsStore.ReplaceParts"/> – doplní kontexty a default umiestnenia.</summary>
     public void SyncFromParts(IEnumerable<Part> parts)
     {
@@ -51,21 +68,24 @@ public sealed class AssemblyStore
                 if (existing.TryGetValue(part, out var prev))
                 {
                     if (ctx.ReferenceBok != null)
+                    {
                         prev.AnchorFace = ConnectionMap.GetContactFaceToReferenceBokTop(
-                            ctx.ReferenceBok.Kind, part.Kind);
+                            ctx.ReferenceBok.Kind, part.Kind, ctx.CorpusMode);
+                    }
                     ctx.Placements.Add(prev);
                     continue;
                 }
 
                 var anchorFace = ctx.ReferenceBok != null
-                    ? ConnectionMap.GetContactFaceToReferenceBokTop(ctx.ReferenceBok.Kind, part.Kind)
+                    ? ConnectionMap.GetContactFaceToReferenceBokTop(
+                        ctx.ReferenceBok.Kind, part.Kind, ctx.CorpusMode)
                     : PartFace.Left;
 
                 ctx.Placements.Add(new AssemblyPlacement
                 {
                     Part = part,
                     AnchorFace = anchorFace,
-                    OffsetY = DefaultOffsetX(part, ctx.ReferenceBok),
+                    OffsetY = DefaultOffsetX(part, ctx.ReferenceBok, ctx.CorpusMode),
                     OffsetDepthMm = DefaultOffsetDepth(part),
                     IsPlacedInScene = false
                 });
@@ -79,7 +99,7 @@ public sealed class AssemblyStore
     private static double DefaultOffsetDepth(Part part) =>
         part.Kind is PartKind.BokP ? part.Dy : 0;
 
-    private static double DefaultOffsetX(Part part, Part? referenceBok)
+    private static double DefaultOffsetX(Part part, Part? referenceBok, AssemblyCorpusMode corpusMode)
     {
         return part.Kind switch
         {

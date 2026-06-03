@@ -12,6 +12,9 @@ public sealed partial class PartsStore : ObservableObject
     public ObservableCollection<Part> Parts { get; } = new();
     public ObservableCollection<Connection> Connections { get; } = new();
 
+    /// <summary>Režim korpusu podľa zostavy (nastaví <see cref="AssemblyStore"/>).</summary>
+    public Func<string, AssemblyCorpusMode>? ResolveCorpusMode { get; set; }
+
     public void ReplaceParts(IEnumerable<Part> parts)
     {
         Parts.Clear();
@@ -34,7 +37,7 @@ public sealed partial class PartsStore : ObservableObject
     public void RegenerateConnections()
     {
         Connections.Clear();
-        foreach (var c in ConnectionMap.GenerateConnections(Parts))
+        foreach (var c in ConnectionMap.GenerateConnections(Parts, ResolveCorpusMode))
             Connections.Add(c);
     }
 }

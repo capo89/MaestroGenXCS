@@ -74,6 +74,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedPlacement))]
     [NotifyPropertyChangedFor(nameof(HasSelectedPlacement))]
     [NotifyPropertyChangedFor(nameof(ReferenceBokText))]
+    [NotifyPropertyChangedFor(nameof(SelectedCorpusMode))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedZostava))]
     private Part? _selectedPart;
 
     [ObservableProperty]
@@ -106,6 +108,20 @@ public sealed partial class AssemblyViewModel : ObservableObject
     public string ReferenceBokText =>
         _assemblyStore.GetContext(SelectedPart?.Zostava)?.ReferenceBok?.Name ?? "–";
 
+    public bool HasSelectedZostava => !string.IsNullOrWhiteSpace(SelectedPart?.Zostava);
+
+    public IReadOnlyList<CorpusModeChoice> CorpusModeChoices { get; } =
+    [
+        new(AssemblyCorpusMode.BokVlozeny, "Bok vložený (dno/vrch nalozené)"),
+        new(AssemblyCorpusMode.BokNalozeny, "Bok nalozený (dno/vrch vložené)"),
+    ];
+
+    public AssemblyCorpusMode SelectedCorpusMode
+    {
+        get => _assemblyStore.GetCorpusMode(SelectedPart?.Zostava);
+        set => SetCorpusModeForSelectedZostava(value);
+    }
+
     public AssemblyContext? GetAssemblyContext(string? zostava) =>
         _assemblyStore.GetContext(zostava);
 
@@ -123,6 +139,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
     {
         _store = store;
         _importer = importer;
+        _store.ResolveCorpusMode = z => _assemblyStore.GetCorpusMode(z);
         _propagator = new OperationPropagator(_store);
         _propagator.StatusMessage += (_, msg) => StatusText = msg;
 
@@ -175,7 +192,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
         if (refBok == null)
             return;
 
-        var contact = ConnectionMap.GetContactFaceToReferenceBokTop(refBok.Kind, placement.Part.Kind);
+        var mode = _assemblyStore.GetCorpusMode(SelectedPart?.Zostava);
+        var contact = ConnectionMap.GetContactFaceToReferenceBokTop(refBok.Kind, placement.Part.Kind, mode);
         var (footX, footY) = AssemblyPartLayout.GetFootprintOnBokTop(placement.Part, contact);
         var maxX = Math.Max(0, refBok.Dx - footX);
         var maxY = Math.Max(0, refBok.Dy - footY);
@@ -267,23 +285,65 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [RelayCommand]
     private void LoadDemo()
     {
-        var bokL = new Part("Bok 1 L", 1800, 320, 18) { Zostava = "1", Kind = PartKind.BokL, Poradie = 1 };
-        var bokP = new Part("Bok 1 P", 1800, 320, 18) { Zostava = "1", Kind = PartKind.BokP, Poradie = 2 };
-        var dno = new Part("Dno 1", 564, 320, 18) { Zostava = "1", Kind = PartKind.Dno, Poradie = 3 };
-        var vrch = new Part("Vrch 1", 564, 320, 18) { Zostava = "1", Kind = PartKind.Vrch, Poradie = 4 };
-        var pol = new Part("Polica 1", 564, 320, 18)
-        {
-            Zostava = "1", Kind = PartKind.Polica, Poradie = 5, PolicaJePevna = true,
-            PolicaDefaultVyskaOdSpoduMm = 900
-        };
-        pol.EnsurePolicaSerie();
-        var trav = new Part("Traverza", 564, 90, 18) { Zostava = "1", Kind = PartKind.Traverza, Poradie = 8 };
+        const string zV = "V";
+        const string zN = "N";
 
-        _store.ReplaceParts(new[] { bokL, bokP, dno, vrch, pol, trav });
+        var bokLv = new Part("Bok L", 564, 320, 18) { Zostava = zV, Kind = PartKind.BokL, Poradie = 1 };
+        var bokPv = new Part("Bok P", 564, 320, 18) { Zostava = zV, Kind = PartKind.BokP, Poradie = 2 };
+        var dnoV = new Part("Dno", 600, 320, 18) { Zostava = zV, Kind = PartKind.Dno, Poradie = 3 };
+        var vrchV = new Part("Vrch", 600, 320, 18) { Zostava = zV, Kind = PartKind.Vrch, Poradie = 4 };
+
+        var bokLn = new Part("Bok L", 1600, 320, 18) { Zostava = zN, Kind = PartKind.BokL, Poradie = 1 };
+        var bokPn = new Part("Bok P", 1600, 320, 18) { Zostava = zN, Kind = PartKind.BokP, Poradie = 2 };
+        var dnoN = new Part("Dno", 600, 320, 18) { Zostava = zN, Kind = PartKind.Dno, Poradie = 3 };
+        var vrchN = new Part("Vrch", 600, 320, 18) { Zostava = zN, Kind = PartKind.Vrch, Poradie = 4 };
+
+        _store.ReplaceParts(new[] { bokLv, bokPv, dnoV, vrchV, bokLn, bokPn, dnoN, vrchN });
         AfterPartsReplaced();
-        SelectedPart = bokL;
-        StatusText = "Demo: 6 dielcov. Kolíky: vyber plochu a tlačidlo Kolíky.";
+
+        if (_assemblyStore.GetContext(zV) is { } ctxV)
+        {
+            ctxV.CorpusMode = AssemblyCorpusMode.BokVlozeny;
+            _assemblyStore.ApplyCorpusModeToPlacements(ctxV);
+        }
+
+        if (_assemblyStore.GetContext(zN) is { } ctxN)
+        {
+            ctxN.CorpusMode = AssemblyCorpusMode.BokNalozeny;
+            _assemblyStore.ApplyCorpusModeToPlacements(ctxN);
+        }
+
+        _store.RegenerateConnections();
+
+        SelectedPart = bokLv;
+        StatusText = "Demo: zostava V (bok vložený) a N (bok nalozený). Režim korpusu zmeň v paneli vpravo.";
     }
+
+    private void SetCorpusModeForSelectedZostava(AssemblyCorpusMode mode)
+    {
+        var zostava = SelectedPart?.Zostava;
+        var ctx = _assemblyStore.GetContext(zostava);
+        if (ctx == null)
+            return;
+
+        if (ctx.CorpusMode == mode)
+            return;
+
+        ctx.CorpusMode = mode;
+        _assemblyStore.ApplyCorpusModeToPlacements(ctx);
+        _store.RegenerateConnections();
+        OnPropertyChanged(nameof(SelectedCorpusMode));
+        Scene3DRefreshRequested?.Invoke(this, EventArgs.Empty);
+        StatusText = $"Zostava „{zostava}“: {CorpusModeLabel(mode)}.";
+    }
+
+    private static string CorpusModeLabel(AssemblyCorpusMode mode) =>
+        mode switch
+        {
+            AssemblyCorpusMode.BokVlozeny => "bok vložený (dno/vrch nalozené)",
+            AssemblyCorpusMode.BokNalozeny => "bok nalozený (dno/vrch vložené)",
+            _ => mode.ToString()
+        };
 
     public DrillOperation? FindEditableDrill(Part part, PartFace? face = null)
     {
@@ -668,6 +728,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
 }
 
 /// <summary>Uzol stromu zostáv v hlavnom okne.</summary>
+public sealed record CorpusModeChoice(AssemblyCorpusMode Mode, string Label);
+
 public sealed class ZostavaTreeNode
 {
     public ZostavaTreeNode(string? zostava)

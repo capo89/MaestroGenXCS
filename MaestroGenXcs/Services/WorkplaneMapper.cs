@@ -38,7 +38,8 @@ public static class WorkplaneMapper
         PartFace dstFace,
         int dstRefpos,
         Guid connectionId,
-        bool identityCoordinates)
+        bool identityCoordinates,
+        double targetPartDz)
     {
         var swap = !identityCoordinates && NeedsAxisSwap(src.Face, dstFace);
 
@@ -81,6 +82,9 @@ public static class WorkplaneMapper
             dst.XStart = src.XStart;
             dst.YStart = src.YStart;
         }
+
+        if (DrillOperation.IsEdgeFace(dstFace))
+            dst.YStart = DrillOperation.CenterThicknessMm(targetPartDz);
 
         return dst;
     }

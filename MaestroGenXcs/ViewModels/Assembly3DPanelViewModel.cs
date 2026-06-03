@@ -65,7 +65,8 @@ public sealed partial class Assembly3DPanelViewModel : ObservableObject
         var refBok = ctx?.ReferenceBok;
         var refDx = refBok?.Dx ?? placement.Part.Dx;
         var refKind = refBok?.Kind ?? PartKind.BokL;
-        var contact = AssemblyPartLayout.ResolveContactFace(refKind, placement.Part.Kind, placement.AnchorFace);
+        var mode = ctx?.CorpusMode ?? AssemblyCorpusMode.BokVlozeny;
+        var contact = AssemblyPartLayout.ResolveContactFace(refKind, placement.Part.Kind, placement.AnchorFace, mode);
         var (footX, _) = AssemblyPartLayout.GetFootprintOnBokTop(placement.Part, contact);
         // X pravítka od pravej hrany = vertikálna čiara; dielec má byť vľavo od nej (pravý okraj dielca na čiare).
         var maxX = Math.Max(0, refDx - footX);

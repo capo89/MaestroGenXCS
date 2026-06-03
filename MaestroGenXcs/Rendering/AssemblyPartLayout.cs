@@ -25,25 +25,30 @@ public static class AssemblyPartLayout
         };
     }
 
-    public static PartFace ResolveContactFace(PartKind referenceBokKind, PartKind partKind, PartFace anchorFace)
+    public static PartFace ResolveContactFace(
+        PartKind referenceBokKind,
+        PartKind partKind,
+        PartFace anchorFace,
+        AssemblyCorpusMode corpusMode)
     {
-        if (UsesVlozenyAssemblyPlacement(partKind))
+        if (ConnectionMap.UsesVlozenyDnoVrchPlacement(partKind, corpusMode))
             return PartFace.Top;
 
         return anchorFace is PartFace.Top or PartFace.Bottom
-            ? GetContactFaceToReferenceBokTop(referenceBokKind, partKind)
+            ? ConnectionMap.GetContactFaceToReferenceBokTop(referenceBokKind, partKind, corpusMode)
             : anchorFace;
     }
 
     public static Transform3D BuildPlacementTransform(
         AssemblyPlacement placement,
-        Part referenceBok)
+        Part referenceBok,
+        AssemblyCorpusMode corpusMode)
     {
-        if (UsesVlozenyAssemblyPlacement(placement.Part.Kind))
+        if (ConnectionMap.UsesVlozenyDnoVrchPlacement(placement.Part.Kind, corpusMode))
             return BuildVlozenyPlacementTransform(placement, referenceBok);
 
         var part = placement.Part;
-        var contact = ResolveContactFace(referenceBok.Kind, part.Kind, placement.AnchorFace);
+        var contact = ResolveContactFace(referenceBok.Kind, part.Kind, placement.AnchorFace, corpusMode);
 
         var group = new Transform3DGroup();
         group.Children.Add(CreateContactFaceRotation(contact));
@@ -53,7 +58,7 @@ public static class AssemblyPartLayout
     }
 
     /// <summary>
-    /// Vložené dno/vrch: panel je otočený tak, aby Top plocha (s kolíkmi) smerovala k hrane boku.
+    /// Korpus Bok vložený: dno/vrch medzi bokmi – Top plocha panelu smeruje k hrane boku.
     /// </summary>
     private static Transform3D BuildVlozenyPlacementTransform(AssemblyPlacement placement, Part referenceBok)
     {
@@ -163,10 +168,4 @@ public static class AssemblyPartLayout
             _ => new Vector3D(0, 0, 0)
         };
     }
-
-    private static PartFace GetContactFaceToReferenceBokTop(PartKind referenceBokKind, PartKind partKind) =>
-        ConnectionMap.GetContactFaceToReferenceBokTop(referenceBokKind, partKind);
-
-    private static bool UsesVlozenyAssemblyPlacement(PartKind partKind) =>
-        partKind is PartKind.Dno or PartKind.Vrch;
 }
