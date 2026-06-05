@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using MaestroGenXcs.Domain;
@@ -13,6 +14,9 @@ public partial class MainWindow : Window
     private Assembly3DWindow? _assembly3DWindow;
 
     private bool _syncingTreeSelection;
+
+    /// <summary>Po kliknutí na uzol „Zostava …“ v strome neprepísať výber na dielec.</summary>
+    private string? _treeZostavaNodeHighlight;
 
     public MainWindow()
     {
@@ -32,14 +36,52 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AssemblyViewModel.SelectedPart))
-            SyncTreeSelectionToSelectedPart();
+        _ = sender;
+        if (e.PropertyName is not nameof(AssemblyViewModel.SelectedPart)
+            and not nameof(AssemblyViewModel.SelectedZostava))
+            return;
+
+        if (PartsTreeView == null)
+            return;
+
+        _syncingTreeSelection = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_treeZostavaNodeHighlight))
+                SelectZostavaNodeInTree(PartsTreeView, _treeZostavaNodeHighlight);
+            else
+                SyncTreeSelectionToSelectedPart();
+        }
+        finally
+        {
+            _syncingTreeSelection = false;
+        }
     }
 
     private void OnPartsTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (_syncingTreeSelection || e.NewValue is not Part part)
+        if (_syncingTreeSelection)
             return;
+
+        if (e.NewValue is ZostavaTreeNode node)
+        {
+            _treeZostavaNodeHighlight = node.Zostava;
+            Vm.SelectZostava(node.Zostava);
+            return;
+        }
+
+        if (e.NewValue is PartTreeEntry entry)
+        {
+            _treeZostavaNodeHighlight = null;
+            if (!ReferenceEquals(Vm.SelectedPart, entry.Part))
+                Vm.SelectedPart = entry.Part;
+            return;
+        }
+
+        if (e.NewValue is not Part part)
+            return;
+
+        _treeZostavaNodeHighlight = null;
         if (!ReferenceEquals(Vm.SelectedPart, part))
             Vm.SelectedPart = part;
     }
@@ -50,15 +92,7 @@ public partial class MainWindow : Window
         if (part == null || PartsTreeView == null)
             return;
 
-        _syncingTreeSelection = true;
-        try
-        {
-            SelectPartInTree(PartsTreeView, part);
-        }
-        finally
-        {
-            _syncingTreeSelection = false;
-        }
+        SelectPartInTree(PartsTreeView, part);
     }
 
     private static void SelectPartInTree(TreeView tree, Part part)
@@ -66,7 +100,11 @@ public partial class MainWindow : Window
         tree.UpdateLayout();
         foreach (var item in tree.Items)
         {
-            if (item is not ZostavaTreeNode node || !node.Parts.Contains(part))
+            if (item is not ZostavaTreeNode node)
+                continue;
+
+            var entry = node.PartEntries.FirstOrDefault(e => ReferenceEquals(e.Part, part));
+            if (entry == null)
                 continue;
 
             if (tree.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem nodeItem)
@@ -74,12 +112,31 @@ public partial class MainWindow : Window
 
             nodeItem.IsExpanded = true;
             nodeItem.UpdateLayout();
-            if (nodeItem.ItemContainerGenerator.ContainerFromItem(part) is TreeViewItem leaf)
+            if (nodeItem.ItemContainerGenerator.ContainerFromItem(entry) is TreeViewItem leaf)
             {
                 leaf.IsSelected = true;
                 leaf.BringIntoView();
             }
 
+            return;
+        }
+    }
+
+    private static void SelectZostavaNodeInTree(TreeView tree, string zostava)
+    {
+        tree.UpdateLayout();
+        foreach (var item in tree.Items)
+        {
+            if (item is not ZostavaTreeNode node
+                || !string.Equals(node.Zostava, zostava, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (tree.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem nodeItem)
+                return;
+
+            nodeItem.IsExpanded = true;
+            nodeItem.IsSelected = true;
+            nodeItem.BringIntoView();
             return;
         }
     }

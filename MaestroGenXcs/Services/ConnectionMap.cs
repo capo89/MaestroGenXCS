@@ -78,16 +78,13 @@ public static class ConnectionMap
         rule.CorpusModeOnly is null || rule.CorpusModeOnly == mode;
 
     /// <summary>
-    /// Kontaktná plocha dielca voči <see cref="PartFace.Top"/> referenčného boku.
+    /// Kontaktná plocha dielca voči <see cref="PartFace.Top"/> referenčného boku (režim bok nalozený).
     /// </summary>
     public static PartFace GetContactFaceToReferenceBokTop(
         PartKind referenceBokKind,
         PartKind partKind,
         AssemblyCorpusMode corpusMode)
     {
-        if (UsesVlozenyDnoVrchPlacement(partKind, corpusMode))
-            return PartFace.Top;
-
         var rule = Rules.FirstOrDefault(r =>
             RuleApplies(r, corpusMode)
             && r.FromKind == referenceBokKind
@@ -102,6 +99,29 @@ public static class ConnectionMap
             PartKind.BokP => PartFace.Right,
             _ => PartFace.Left
         };
+    }
+
+    /// <summary>
+    /// Plocha dielca pre 3D skladanie (stojaci panel dno/vrch pri boku vloženom).
+    /// </summary>
+    public static PartFace GetLayoutContactFace(
+        PartKind referenceBokKind,
+        PartKind partKind,
+        AssemblyCorpusMode corpusMode)
+    {
+        if (UsesVlozenyDnoVrchPlacement(partKind, corpusMode))
+        {
+            return (referenceBokKind, partKind) switch
+            {
+                (PartKind.BokL, PartKind.Dno) => PartFace.Left,
+                (PartKind.BokL, PartKind.Vrch) => PartFace.Right,
+                (PartKind.BokP, PartKind.Dno) => PartFace.Right,
+                (PartKind.BokP, PartKind.Vrch) => PartFace.Left,
+                _ => PartFace.Left
+            };
+        }
+
+        return GetContactFaceToReferenceBokTop(referenceBokKind, partKind, corpusMode);
     }
 
     public static bool UsesVlozenyDnoVrchPlacement(PartKind partKind, AssemblyCorpusMode corpusMode) =>

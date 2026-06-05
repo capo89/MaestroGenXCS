@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MaestroGenXcs.Domain;
+using MaestroGenXcs.Services;
 using MaestroGenXcs.Xcs;
 
 namespace MaestroGenXcs.Operations;
@@ -58,6 +59,10 @@ public sealed partial class DrillOperation : CncOperation
     [ObservableProperty]
     private bool _preniestNaDruhyBok = true;
 
+    /// <summary>Dno/vrch Top (bok vložený): na ktorý bok sa pattern viaže a propaguje.</summary>
+    [ObservableProperty]
+    private PartKind? _kolikPartnerBok;
+
     /// <summary>Majster operácia pre traverzu – z nej sa generujú kolíky na bokoch.</summary>
     [ObservableProperty]
     private bool _isTraverzaMaster;
@@ -90,13 +95,17 @@ public sealed partial class DrillOperation : CncOperation
     public override string ToXcs(MaestroContext ctx)
     {
         var yStart = IsEdgeFace(Face) ? CenterThicknessMm(ctx.BoxThickness) : YStart;
+        var (countX, countY, pitchX, pitchY) = DnoVrchTopKolikyHelper.GetTopGridForPreview(this);
+        var xStart = KolikPartnerBok is not null
+            ? DnoVrchTopKolikyHelper.ResolveLocalXStart(this, ctx.BoxLength)
+            : XStart;
         return MaestroXcsBuilder.DrillPattern(
-            countX: CountX,
-            countY: CountY,
-            xStart: XStart,
+            countX: countX,
+            countY: countY,
+            xStart: xStart,
             yStart: yStart,
-            pitchX: PitchX,
-            pitchY: PitchY,
+            pitchX: pitchX,
+            pitchY: pitchY,
             diameter: Diameter,
             depth: Depth,
             name: string.IsNullOrWhiteSpace(Name) ? "Drill" : Name,
@@ -113,11 +122,15 @@ public sealed partial class DrillOperation : CncOperation
     /// počtu kolíkov a rozteče, identicky ako produkuje <c>CreatePattern</c>.
     /// Súradnice sú v lokálnej rovine dielca v ramci aktuálnej plochy.
     /// </summary>
-    public IEnumerable<(double X, double Y)> EnumerateGridPoints()
+    public IEnumerable<(double X, double Y)> EnumerateGridPoints(double panelDx = 0)
     {
-        for (var iy = 0; iy < Math.Max(1, CountY); iy++)
-        for (var ix = 0; ix < Math.Max(1, CountX); ix++)
-            yield return (XStart + ix * PitchX, YStart + iy * PitchY);
+        var (countX, countY, pitchX, pitchY) = DnoVrchTopKolikyHelper.GetTopGridForPreview(this);
+        var x0 = KolikPartnerBok is not null && panelDx > 0
+            ? DnoVrchTopKolikyHelper.ResolveLocalXStart(this, panelDx)
+            : XStart;
+        for (var iy = 0; iy < Math.Max(1, countY); iy++)
+        for (var ix = 0; ix < Math.Max(1, countX); ix++)
+            yield return (x0 + ix * pitchX, YStart + iy * pitchY);
     }
 
     public override IEnumerable<VisualHint> BuildVisualHints(double dx, double dy, double dz)
@@ -139,8 +152,17 @@ public sealed partial class DrillOperation : CncOperation
         }
 
         // Top / Bottom – klasická projekcia s refpos v rohoch plášťa.
-        foreach (var (gx, gy) in EnumerateGridPoints())
+        var xStart = KolikPartnerBok is not null
+            ? DnoVrchTopKolikyHelper.ResolveLocalXStart(this, dx)
+            : XStart;
+        var (countX, countY, pitchX, pitchY) = KolikPartnerBok is not null
+            ? DnoVrchTopKolikyHelper.GetTopGridForPreview(this)
+            : (CountX, CountY, PitchX, PitchY);
+        for (var iy = 0; iy < Math.Max(1, countY); iy++)
+        for (var ix = 0; ix < Math.Max(1, countX); ix++)
         {
+            var gx = xStart + ix * pitchX;
+            var gy = YStart + iy * pitchY;
             var (wx, wy) = TransformByRefpos(gx, gy, dx, dy);
             yield return new HoleHint(
                 X: wx,
@@ -151,6 +173,8 @@ public sealed partial class DrillOperation : CncOperation
                 Depth: Depth,
                 Tag: "drill");
         }
+
+        yield break;
     }
 
     /// <summary>
@@ -177,6 +201,27 @@ public sealed partial class DrillOperation : CncOperation
                 PartFace.Back => (RefPos is 1 or 3 ? dx - along : along, thicknessCenter),
                 _ => (fromPredna, thicknessCenter)
             };
+        }
+    }
+
+    /// <summary>Stredy kolíkov na ploche Top/Bottom v mm (0..Dx, 0..Dy).</summary>
+    public IEnumerable<(double X, double Y)> EnumerateWorldTopBottomCenters(double dx, double dy)
+    {
+        if (IsEdgeFace(Face))
+            yield break;
+
+        var xStart = KolikPartnerBok is not null
+            ? DnoVrchTopKolikyHelper.ResolveLocalXStart(this, dx)
+            : XStart;
+        var (countX, countY, pitchX, pitchY) = KolikPartnerBok is not null
+            ? DnoVrchTopKolikyHelper.GetTopGridForPreview(this)
+            : (CountX, CountY, PitchX, PitchY);
+        for (var iy = 0; iy < Math.Max(1, countY); iy++)
+        for (var ix = 0; ix < Math.Max(1, countX); ix++)
+        {
+            var gx = xStart + ix * pitchX;
+            var gy = YStart + iy * pitchY;
+            yield return TransformByRefpos(gx, gy, dx, dy);
         }
     }
 

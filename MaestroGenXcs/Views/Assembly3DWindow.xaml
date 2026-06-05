@@ -32,7 +32,7 @@
                 <TextBlock x:Name="DetailLabel" Foreground="LightGray" TextWrapping="Wrap"/>
                 <TextBlock x:Name="SelectedPartLabel" Foreground="#FF4EC9B0" Margin="0,6,0,0" TextWrapping="Wrap"/>
                 <TextBlock Foreground="#FFAAAAAA" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
-                           Text="Bok L: pohľad Top. ⚙ = editor dielca (kolíky), potom Vložiť / Upraviť a potiahni diel."/>
+                           Text="Bok L je pevný (referencia). Dno/vrch: ⚙ kolíky → Vložiť → potiahni v 3D (alebo Upraviť a znova ťahaj)."/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10">

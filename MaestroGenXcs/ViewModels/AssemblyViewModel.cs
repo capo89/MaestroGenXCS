@@ -28,6 +28,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
     private readonly DispatcherTimer _policaRebuildTimer;
     private Part? _policaRebuildTarget;
     private AssemblyPlacement? _wiredPlacement;
+    private readonly HashSet<Part> _setupRefreshWiredParts = new();
+    private readonly HashSet<AssemblyPlacement> _setupRefreshWiredPlacements = new();
 
     private static readonly HashSet<string> PolicaRebuildProperties = new(StringComparer.Ordinal)
     {
@@ -54,6 +56,9 @@ public sealed partial class AssemblyViewModel : ObservableObject
     /// <summary>Strom: zostava → dielce (pre hlavné okno).</summary>
     public ObservableCollection<ZostavaTreeNode> PartsTree { get; } = new();
 
+    private bool _syncingZostavaFromPart;
+    private bool _syncingPartFromZostava;
+
     public IReadOnlyList<PartFace> DrillFaceChoices { get; } =
     [
         PartFace.Top,
@@ -76,7 +81,18 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ReferenceBokText))]
     [NotifyPropertyChangedFor(nameof(SelectedCorpusMode))]
     [NotifyPropertyChangedFor(nameof(HasSelectedZostava))]
+    [NotifyPropertyChangedFor(nameof(ActiveZostavaForBinding))]
     private Part? _selectedPart;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedZostavaText))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedZostava))]
+    [NotifyPropertyChangedFor(nameof(SelectedCorpusMode))]
+    [NotifyPropertyChangedFor(nameof(ReferenceBokText))]
+    [NotifyPropertyChangedFor(nameof(SelectedPlacement))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedPlacement))]
+    [NotifyPropertyChangedFor(nameof(ActiveZostavaForBinding))]
+    private string? _selectedZostava;
 
     [ObservableProperty]
     private PartFace _selectedDrillFace = PartFace.Top;
@@ -90,7 +106,15 @@ public sealed partial class AssemblyViewModel : ObservableObject
     public string SelectedDy => SelectedPart?.Dy.ToString("0.##", CultureInfo.InvariantCulture) ?? "–";
     public string SelectedDz => SelectedPart?.Dz.ToString("0.##", CultureInfo.InvariantCulture) ?? "–";
     public string SelectedKindText => SelectedPart?.Kind.ToString() ?? "–";
-    public string SelectedZostavaText => SelectedPart?.Zostava ?? "–";
+    public string SelectedZostavaText => ActiveZostava ?? "–";
+
+    /// <summary>Pre väzby v UI – aktívna zostava na skladanie.</summary>
+    public string? ActiveZostavaForBinding => ActiveZostava;
+
+    private string? ActiveZostava =>
+        !string.IsNullOrWhiteSpace(SelectedZostava)
+            ? SelectedZostava
+            : SelectedPart?.Zostava;
 
     public AssemblyPlacement? SelectedPlacement
     {
@@ -98,7 +122,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         {
             if (SelectedPart == null)
                 return null;
-            var ctx = _assemblyStore.GetContext(SelectedPart.Zostava);
+            var ctx = _assemblyStore.GetContext(ActiveZostava);
             return ctx?.Placements.FirstOrDefault(p => ReferenceEquals(p.Part, SelectedPart));
         }
     }
@@ -106,9 +130,9 @@ public sealed partial class AssemblyViewModel : ObservableObject
     public bool HasSelectedPlacement => SelectedPlacement != null;
 
     public string ReferenceBokText =>
-        _assemblyStore.GetContext(SelectedPart?.Zostava)?.ReferenceBok?.Name ?? "–";
+        _assemblyStore.GetContext(ActiveZostava)?.ReferenceBok?.Name ?? "–";
 
-    public bool HasSelectedZostava => !string.IsNullOrWhiteSpace(SelectedPart?.Zostava);
+    public bool HasSelectedZostava => !string.IsNullOrWhiteSpace(ActiveZostava);
 
     public IReadOnlyList<CorpusModeChoice> CorpusModeChoices { get; } =
     [
@@ -118,7 +142,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
     public AssemblyCorpusMode SelectedCorpusMode
     {
-        get => _assemblyStore.GetCorpusMode(SelectedPart?.Zostava);
+        get => _assemblyStore.GetCorpusMode(ActiveZostava);
         set => SetCorpusModeForSelectedZostava(value);
     }
 
@@ -150,6 +174,15 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
     partial void OnSelectedPartChanged(Part? value)
     {
+        if (!_syncingPartFromZostava
+            && !string.IsNullOrWhiteSpace(value?.Zostava)
+            && !string.Equals(value.Zostava, SelectedZostava, StringComparison.OrdinalIgnoreCase))
+        {
+            _syncingZostavaFromPart = true;
+            SelectedZostava = value.Zostava;
+            _syncingZostavaFromPart = false;
+        }
+
         UnwirePlacement();
         if (SelectedPlacement != null)
         {
@@ -159,10 +192,61 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
         OnPropertyChanged(nameof(SelectedPlacement));
         OnPropertyChanged(nameof(HasSelectedPlacement));
+        OnPropertyChanged(nameof(ReferenceBokText));
+        OnPropertyChanged(nameof(SelectedCorpusMode));
 
         if (value is { IsPolica: true })
             SchedulePolicaRebuild(value);
         Scene3DRefreshRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    partial void OnSelectedZostavaChanged(string? value)
+    {
+        if (_syncingZostavaFromPart)
+            return;
+
+        var current = SelectedPart;
+        if (current == null
+            || !string.Equals(current.Zostava, value, StringComparison.OrdinalIgnoreCase))
+        {
+            var part = FindDefaultPartForZostava(value);
+            if (part != null && !ReferenceEquals(SelectedPart, part))
+            {
+                _syncingPartFromZostava = true;
+                SelectedPart = part;
+                _syncingPartFromZostava = false;
+            }
+        }
+
+        OnPropertyChanged(nameof(SelectedPlacement));
+        OnPropertyChanged(nameof(HasSelectedPlacement));
+        OnPropertyChanged(nameof(ReferenceBokText));
+        OnPropertyChanged(nameof(SelectedCorpusMode));
+        OnPropertyChanged(nameof(SelectedZostavaText));
+        Scene3DRefreshRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Nastaví aktívnu zostavu zo stromu – pri prepnutí zostavy zladí <see cref="SelectedPart"/>.</summary>
+    public void SelectZostava(string? zostava)
+    {
+        if (string.IsNullOrWhiteSpace(zostava))
+            return;
+        SelectedZostava = zostava;
+    }
+
+    private Part? FindDefaultPartForZostava(string? zostava)
+    {
+        if (string.IsNullOrWhiteSpace(zostava))
+            return null;
+
+        var inZostava = _store.Parts
+            .Where(p => string.Equals(p.Zostava, zostava, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Poradie)
+            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return inZostava.FirstOrDefault(p => p.Kind == PartKind.BokL)
+            ?? inZostava.FirstOrDefault();
     }
 
     private void UnwirePlacement()
@@ -188,16 +272,14 @@ public sealed partial class AssemblyViewModel : ObservableObject
         if (placement is not { IsPlacedInScene: true })
             return;
 
-        var refBok = _assemblyStore.GetContext(SelectedPart?.Zostava)?.ReferenceBok;
+        var refBok = _assemblyStore.GetContext(ActiveZostava)?.ReferenceBok;
         if (refBok == null)
             return;
 
-        var mode = _assemblyStore.GetCorpusMode(SelectedPart?.Zostava);
-        var contact = ConnectionMap.GetContactFaceToReferenceBokTop(refBok.Kind, placement.Part.Kind, mode);
-        var (footX, footY) = AssemblyPartLayout.GetFootprintOnBokTop(placement.Part, contact);
-        var maxX = Math.Max(0, refBok.Dx - footX);
-        var maxY = Math.Max(0, refBok.Dy - footY);
-        var x = Math.Clamp(offsetX, 0, maxX);
+        var mode = _assemblyStore.GetCorpusMode(ActiveZostava);
+        var (minX, maxX, maxY) = AssemblyPartLayout.GetPlacementOffsetLimits(
+            placement.Part, refBok, refBok.Kind, mode);
+        var x = Math.Clamp(offsetX, minX, maxX);
         var y = Math.Clamp(offsetDepthMm, 0, maxY);
 
         placement.OffsetY = x;
@@ -213,7 +295,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         if (placement == null)
             return;
 
-        var refBok = _assemblyStore.GetContext(SelectedPart?.Zostava)?.ReferenceBok;
+        var refBok = _assemblyStore.GetContext(ActiveZostava)?.ReferenceBok;
         var max = Math.Max(0, (refBok?.Dx ?? 2000) - placement.Part.Dz);
         var v = Math.Clamp(mm, 0, max);
         if (snapRoztec)
@@ -229,8 +311,33 @@ public sealed partial class AssemblyViewModel : ObservableObject
         foreach (var p in _store.Parts)
             WirePolicaPart(p);
         RebuildPartsTree();
+        WireAllSetupRefreshHooks();
+        EnsureSelectedZostavaStillValid();
         OnPropertyChanged(nameof(SelectedPlacement));
         OnPropertyChanged(nameof(ReferenceBokText));
+        OnPropertyChanged(nameof(HasSelectedZostava));
+    }
+
+    private void EnsureSelectedZostavaStillValid()
+    {
+        var keys = _store.Parts
+            .Select(p => p.Zostava)
+            .Where(z => !string.IsNullOrWhiteSpace(z))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (keys.Count == 0)
+        {
+            SelectedZostava = null;
+            return;
+        }
+
+        var current = ActiveZostava;
+        if (!string.IsNullOrWhiteSpace(current)
+            && keys.Any(z => string.Equals(z, current, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        SelectedZostava = keys.OrderBy(z => z, StringComparer.OrdinalIgnoreCase).First();
     }
 
     private void RebuildPartsTree()
@@ -242,9 +349,57 @@ public sealed partial class AssemblyViewModel : ObservableObject
         {
             var node = new ZostavaTreeNode(group.Key);
             foreach (var part in group.OrderBy(p => p.Poradie).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
-                node.Parts.Add(part);
+            {
+                var entry = new PartTreeEntry(part);
+                entry.Refresh(_assemblyStore);
+                node.PartEntries.Add(entry);
+            }
+
+            node.RefreshFromEntries();
             PartsTree.Add(node);
         }
+    }
+
+    private void RefreshTreeSetupStatus()
+    {
+        foreach (var node in PartsTree)
+        {
+            foreach (var entry in node.PartEntries)
+                entry.Refresh(_assemblyStore);
+            node.RefreshFromEntries();
+        }
+    }
+
+    private void WireAllSetupRefreshHooks()
+    {
+        foreach (var part in _store.Parts)
+            WirePartSetupRefresh(part);
+
+        foreach (var ctx in _assemblyStore.Contexts.Values)
+        {
+            foreach (var placement in ctx.Placements)
+                WirePlacementSetupRefresh(placement);
+        }
+    }
+
+    private void WirePartSetupRefresh(Part part)
+    {
+        if (!_setupRefreshWiredParts.Add(part))
+            return;
+
+        part.Operations.CollectionChanged += (_, _) => RefreshTreeSetupStatus();
+    }
+
+    private void WirePlacementSetupRefresh(AssemblyPlacement placement)
+    {
+        if (!_setupRefreshWiredPlacements.Add(placement))
+            return;
+
+        placement.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AssemblyPlacement.IsPlacedInScene))
+                RefreshTreeSetupStatus();
+        };
     }
 
     [RelayCommand]
@@ -263,6 +418,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
             _store.ReplaceParts(list);
             AfterPartsReplaced();
             SelectedPart = _store.Parts.FirstOrDefault();
+            SelectedZostava = SelectedPart?.Zostava;
             StatusText = list.Count > 0
                 ? $"Importovaných položiek: {list.Count}"
                 : "Import: nenašli sa žiadne dielce.";
@@ -315,13 +471,14 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
         _store.RegenerateConnections();
 
+        SelectedZostava = zV;
         SelectedPart = bokLv;
-        StatusText = "Demo: zostava V (bok vložený) a N (bok nalozený). Režim korpusu zmeň v paneli vpravo.";
+        StatusText = "Demo: zostavy V a N – v strome označ zostavu alebo dielec.";
     }
 
     private void SetCorpusModeForSelectedZostava(AssemblyCorpusMode mode)
     {
-        var zostava = SelectedPart?.Zostava;
+        var zostava = ActiveZostava;
         var ctx = _assemblyStore.GetContext(zostava);
         if (ctx == null)
             return;
@@ -345,21 +502,28 @@ public sealed partial class AssemblyViewModel : ObservableObject
             _ => mode.ToString()
         };
 
-    public DrillOperation? FindEditableDrill(Part part, PartFace? face = null)
+    public bool UsesDnoVrchDualTopKoliky(Part part, PartFace face) =>
+        DnoVrchTopKolikyHelper.UsesDualTopKoliky(
+            part, face, _assemblyStore.GetCorpusMode(part.Zostava));
+
+    public DrillOperation? FindEditableDrill(Part part, PartFace? face = null, PartKind? kolikPartnerBok = null)
     {
         if (TraverzaKolikyApplier.IsTraverzaPart(part))
             return TraverzaKolikyApplier.FindTraverzaMaster(part);
 
-        IEnumerable<DrillOperation> q = part.Operations.OfType<DrillOperation>();
+        IEnumerable<DrillOperation> q = part.Operations.OfType<DrillOperation>()
+            .Where(o => !o.IsPropagated);
         if (face.HasValue)
             q = q.Where(o => o.Face == face.Value);
+        if (kolikPartnerBok.HasValue)
+            q = q.Where(o => o.KolikPartnerBok == kolikPartnerBok.Value);
 
         return q.FirstOrDefault();
     }
 
-    public bool SaveDrillOperation(DrillOperation op, bool isNew)
+    public bool SaveDrillOperation(DrillOperation op, bool isNew, Part? targetPart = null)
     {
-        var part = SelectedPart;
+        var part = targetPart ?? SelectedPart;
         if (part == null)
         {
             StatusText = "Najprv vyber dielec.";
@@ -367,8 +531,12 @@ public sealed partial class AssemblyViewModel : ObservableObject
         }
 
         if (isNew)
-            part.Operations.Add(op);
+        {
+            _propagator.ExecuteWithoutPropagation(() => part.Operations.Add(op));
+            _propagator.PropagateDrillAdded(part, op);
+        }
 
+        RefreshTreeSetupStatus();
         StatusText = isNew
             ? $"Pridané vŕtanie: {op.Name} ({op.CountX}×{op.CountY} kolíkov, plocha {op.Face})."
             : $"Upravené vŕtanie: {op.Name} ({op.CountX}×{op.CountY} kolíkov, plocha {op.Face}).";
@@ -513,14 +681,20 @@ public sealed partial class AssemblyViewModel : ObservableObject
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
             foreach (var p in _store.Parts)
+            {
                 WirePolicaPart(p);
+                WirePartSetupRefresh(p);
+            }
             return;
         }
 
         if (e.NewItems != null)
         {
             foreach (Part p in e.NewItems)
+            {
                 WirePolicaPart(p);
+                WirePartSetupRefresh(p);
+            }
         }
 
         if (e.OldItems != null)
@@ -595,10 +769,10 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [RelayCommand]
     private void ApplyAssembly()
     {
-        var zostava = SelectedPart?.Zostava;
+        var zostava = ActiveZostava;
         if (string.IsNullOrWhiteSpace(zostava))
         {
-            StatusText = "Vyber dielec v zostave.";
+            StatusText = "V strome označ zostavu alebo dielec.";
             return;
         }
 
@@ -613,6 +787,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         {
             AssemblySolverApplier.Apply(_store, ctx, _propagator);
             StatusText = $"Zostava „{zostava}“: prepocítané ({ctx.Placements.Count} umiestnení).";
+            RefreshTreeSetupStatus();
             NotifySceneRefresh();
         }
         catch (Exception ex)
@@ -625,10 +800,10 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [RelayCommand]
     private void ExportAssemblyXcs()
     {
-        var zostava = SelectedPart?.Zostava;
+        var zostava = ActiveZostava;
         if (string.IsNullOrWhiteSpace(zostava))
         {
-            StatusText = "Vyber dielec v zostave.";
+            StatusText = "V strome označ zostavu alebo dielec.";
             return;
         }
 
@@ -723,14 +898,17 @@ public sealed partial class AssemblyViewModel : ObservableObject
         return sb.ToString().Trim();
     }
 
-    public void NotifySceneRefresh() =>
+    public void NotifySceneRefresh()
+    {
+        RefreshTreeSetupStatus();
         Scene3DRefreshRequested?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 /// <summary>Uzol stromu zostáv v hlavnom okne.</summary>
 public sealed record CorpusModeChoice(AssemblyCorpusMode Mode, string Label);
 
-public sealed class ZostavaTreeNode
+public sealed partial class ZostavaTreeNode : ObservableObject
 {
     public ZostavaTreeNode(string? zostava)
     {
@@ -741,5 +919,11 @@ public sealed class ZostavaTreeNode
     public string Zostava { get; }
     public string DisplayName { get; }
     public bool IsExpanded { get; set; } = true;
-    public ObservableCollection<Part> Parts { get; } = new();
+    public ObservableCollection<PartTreeEntry> PartEntries { get; } = new();
+
+    [ObservableProperty]
+    private bool _isConfigured;
+
+    public void RefreshFromEntries() =>
+        IsConfigured = PartEntries.Count > 0 && PartEntries.All(e => e.IsConfigured);
 }

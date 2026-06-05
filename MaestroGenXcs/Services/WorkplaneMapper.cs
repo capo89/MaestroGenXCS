@@ -62,6 +62,7 @@ public static class WorkplaneMapper
             SourceOperationId = src.SourceOperationId ?? src.Id,
             SourceConnectionId = connectionId,
             PreniestNaDruhyBok = src.PreniestNaDruhyBok,
+            KolikPartnerBok = src.KolikPartnerBok,
         };
 
         if (swap)

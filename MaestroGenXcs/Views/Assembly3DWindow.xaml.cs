@@ -19,6 +19,8 @@ public partial class Assembly3DWindow : Window
     private double _dragStartX;
     private double _dragStartDepth;
 
+    public AssemblyViewModel? AssemblyVm => _vm;
+
     public Assembly3DPanelViewModel Panel => _panel ??= new Assembly3DPanelViewModel(_vm!, OpenPinSettingsForPlacement);
 
     public Assembly3DWindow()
@@ -50,7 +52,8 @@ public partial class Assembly3DWindow : Window
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _ = sender;
-        if (e.PropertyName == nameof(AssemblyViewModel.SelectedPart))
+        if (e.PropertyName is nameof(AssemblyViewModel.SelectedPart)
+            or nameof(AssemblyViewModel.SelectedZostava))
         {
             _panel?.RefreshInsertList();
             Rebuild(resetCamera: false);
@@ -85,7 +88,7 @@ public partial class Assembly3DWindow : Window
         if (_vm == null || _panel == null)
             return;
 
-        var zostava = _vm.SelectedPart?.Zostava;
+        var zostava = _vm.ActiveZostavaForBinding;
         var ctx = _vm.GetAssemblyContext(zostava);
 
         for (var i = Viewport.Children.Count - 1; i >= 0; i--)
@@ -127,7 +130,7 @@ public partial class Assembly3DWindow : Window
     private void OnViewTop_Click(object sender, RoutedEventArgs e)
     {
         _ = sender; _ = e;
-        SetTopView(_vm?.GetAssemblyContext(_vm.SelectedPart?.Zostava));
+        SetTopView(_vm?.GetAssemblyContext(_vm.ActiveZostavaForBinding));
         Viewport.ZoomExtents(0);
     }
 
@@ -142,6 +145,12 @@ public partial class Assembly3DWindow : Window
     {
         _ = sender;
         var placement = GetDraggablePlacement();
+        if (placement == null && _vm?.SelectedPlacement is { IsPlacedInScene: true, IsLocked: false } sel)
+        {
+            placement = sel;
+            _vm.ActivePlacementForDrag = sel;
+        }
+
         if (placement == null)
             return;
 
@@ -187,17 +196,30 @@ public partial class Assembly3DWindow : Window
 
         _dragging = false;
         Viewport.ReleaseMouseCapture();
-
-        if (_vm.ActivePlacementForDrag is { IsPlacedInScene: true })
-            _vm.ActivePlacementForDrag = null;
-
         Rebuild(resetCamera: false);
+    }
+
+    private double DragPlaneZ()
+    {
+        var ctx = _vm?.GetAssemblyContext(_vm.ActiveZostavaForBinding);
+        return Math.Max(0, ctx?.ReferenceBok?.Dz ?? 18);
+    }
+
+    /// <summary>Rovina Top referenčného boku – rovnaká pre dno aj vrch pri ťahaní v X/Y.</summary>
+    private Point3D? UnProjectOnBokTopPlane(Point screen)
+    {
+        var z = DragPlaneZ();
+        return Viewport3DHelper.UnProject(
+            Viewport.Viewport,
+            screen,
+            new Point3D(0, 0, z),
+            new Vector3D(0, 0, 1));
     }
 
     private (double Dx, double Dy) ScreenDeltaToWorldXYmm(Point start, Point end)
     {
-        var a = Viewport3DHelper.UnProject(Viewport.Viewport, start);
-        var b = Viewport3DHelper.UnProject(Viewport.Viewport, end);
+        var a = UnProjectOnBokTopPlane(start);
+        var b = UnProjectOnBokTopPlane(end);
         if (!a.HasValue || !b.HasValue)
             return ((end.X - start.X) * 2.0, (start.Y - end.Y) * 2.0);
         return (b.Value.X - a.Value.X, b.Value.Y - a.Value.Y);

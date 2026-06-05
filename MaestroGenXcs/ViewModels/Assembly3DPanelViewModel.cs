@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Rendering;
+using MaestroGenXcs.Services;
 
 namespace MaestroGenXcs.ViewModels;
 
@@ -31,7 +32,7 @@ public sealed partial class Assembly3DPanelViewModel : ObservableObject
     public void RefreshInsertList()
     {
         InsertItems.Clear();
-        var ctx = _parent.GetAssemblyContext(_parent.SelectedPart?.Zostava);
+        var ctx = _parent.GetAssemblyContext(_parent.ActiveZostavaForBinding);
         if (ctx?.ReferenceBok == null)
             return;
 
@@ -63,15 +64,23 @@ public sealed partial class Assembly3DPanelViewModel : ObservableObject
 
         var ctx = _parent.GetAssemblyContext(placement.Part.Zostava);
         var refBok = ctx?.ReferenceBok;
-        var refDx = refBok?.Dx ?? placement.Part.Dx;
-        var refKind = refBok?.Kind ?? PartKind.BokL;
+        if (refBok == null)
+            return;
+
+        var refDx = refBok.Dx;
+        var refKind = refBok.Kind;
         var mode = ctx?.CorpusMode ?? AssemblyCorpusMode.BokVlozeny;
-        var contact = AssemblyPartLayout.ResolveContactFace(refKind, placement.Part.Kind, placement.AnchorFace, mode);
-        var (footX, _) = AssemblyPartLayout.GetFootprintOnBokTop(placement.Part, contact);
-        // X pravítka od pravej hrany = vertikálna čiara; dielec má byť vľavo od nej (pravý okraj dielca na čiare).
-        var maxX = Math.Max(0, refDx - footX);
-        placement.OffsetY = Math.Clamp(refDx - GuideX - footX, 0, maxX);
-        placement.OffsetDepthMm = GuideY;
+        var (minX, maxX, maxY) = AssemblyPartLayout.GetPlacementOffsetLimits(
+            placement.Part, refBok, refKind, mode);
+
+        if (ConnectionMap.UsesVlozenyDnoVrchPlacement(placement.Part.Kind, mode))
+        {
+            var span = maxX - minX;
+            placement.OffsetY = Math.Clamp(minX + Math.Min(GuideX, span), minX, maxX);
+        }
+        else
+            placement.OffsetY = Math.Clamp(refDx - GuideX - placement.Part.Dz, 0, maxX);
+        placement.OffsetDepthMm = Math.Clamp(GuideY, 0, maxY);
         placement.IsPlacedInScene = true;
         _parent.ActivePlacementForDrag = placement;
         _parent.SelectedPart = placement.Part;

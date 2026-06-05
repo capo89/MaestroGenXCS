@@ -1,4 +1,5 @@
 using MaestroGenXcs.Domain;
+using MaestroGenXcs.Rendering;
 
 namespace MaestroGenXcs.Services;
 
@@ -27,7 +28,7 @@ public sealed class AssemblyStore
 
         foreach (var placement in ctx.Placements)
         {
-            placement.AnchorFace = ConnectionMap.GetContactFaceToReferenceBokTop(
+            placement.AnchorFace = ConnectionMap.GetLayoutContactFace(
                 ctx.ReferenceBok.Kind, placement.Part.Kind, ctx.CorpusMode);
             placement.OffsetY = DefaultOffsetX(placement.Part, ctx.ReferenceBok, ctx.CorpusMode);
         }
@@ -69,7 +70,7 @@ public sealed class AssemblyStore
                 {
                     if (ctx.ReferenceBok != null)
                     {
-                        prev.AnchorFace = ConnectionMap.GetContactFaceToReferenceBokTop(
+                        prev.AnchorFace = ConnectionMap.GetLayoutContactFace(
                             ctx.ReferenceBok.Kind, part.Kind, ctx.CorpusMode);
                     }
                     ctx.Placements.Add(prev);
@@ -77,7 +78,7 @@ public sealed class AssemblyStore
                 }
 
                 var anchorFace = ctx.ReferenceBok != null
-                    ? ConnectionMap.GetContactFaceToReferenceBokTop(
+                    ? ConnectionMap.GetLayoutContactFace(
                         ctx.ReferenceBok.Kind, part.Kind, ctx.CorpusMode)
                     : PartFace.Left;
 
@@ -107,7 +108,15 @@ public sealed class AssemblyStore
                 ? part.PolicaSerie[0].OdSpoduMm
                 : part.PolicaDefaultVyskaOdSpoduMm,
             PartKind.Traverza => TraverzaKolikyApplier.FindTraverzaMaster(part)?.TraverzaBokYStart ?? 37,
+            PartKind.Dno when ConnectionMap.UsesVlozenyDnoVrchPlacement(PartKind.Dno, corpusMode) =>
+                referenceBok != null
+                    ? AssemblyPartLayout.VlozenyDefaultOffsetX(part, referenceBok)
+                    : 0,
             PartKind.Dno => 0,
+            PartKind.Vrch when ConnectionMap.UsesVlozenyDnoVrchPlacement(PartKind.Vrch, corpusMode) =>
+                referenceBok != null
+                    ? AssemblyPartLayout.VlozenyDefaultOffsetX(part, referenceBok)
+                    : 0,
             PartKind.Vrch => referenceBok != null
                 ? Math.Max(0, referenceBok.Dx - part.Dz)
                 : 0,

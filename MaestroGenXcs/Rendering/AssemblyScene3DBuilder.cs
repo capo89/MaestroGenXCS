@@ -6,10 +6,12 @@ using MaestroGenXcs.Domain;
 namespace MaestroGenXcs.Rendering;
 
 /// <summary>
-/// 3D skladanie – referenčný Bok L (pohľad Top) + vložené dielce v orientácii kontaktnej plochy k Top boku.
+/// 3D skladanie – referenčný Bok L (pohľad Top) + dielce (dno/vrch na stojaka, pri „bok vložený“ s korekciou polohy).
 /// </summary>
 public sealed class AssemblyScene3DBuilder
 {
+    private static readonly Scene3DBuilder BoardBuilder = new();
+
     private static readonly Brush ReferenceBrush =
         new SolidColorBrush(Color.FromRgb(0xC4, 0xA4, 0x6A));
     private static readonly Brush PlacedBrush =
@@ -31,19 +33,16 @@ public sealed class AssemblyScene3DBuilder
         var dy = refBok.Dy;
         var refKind = refBok.Kind;
 
-        foreach (var v in BuildPart(refBok, null, ReferenceBrush, false, PartFace.Top))
+        foreach (var v in BuildPart(refBok, null, ReferenceBrush))
             yield return v;
         foreach (var v in BuildOperationVisuals(refBok, null))
             yield return v;
 
         foreach (var placement in ctx.Placements.Where(p => p.IsPlacedInScene))
         {
-            var isSel = ReferenceEquals(placement.Part, selectedPart);
-            var brush = isSel ? SelectedBrush : PlacedBrush;
-            var contact = AssemblyPartLayout.ResolveContactFace(
-                refKind, placement.Part.Kind, placement.AnchorFace, ctx.CorpusMode);
+            var brush = ReferenceEquals(placement.Part, selectedPart) ? SelectedBrush : PlacedBrush;
             var transform = AssemblyPartLayout.BuildPlacementTransform(placement, refBok, ctx.CorpusMode);
-            foreach (var v in BuildPart(placement.Part, transform, brush, isSel, contact))
+            foreach (var v in BuildPart(placement.Part, transform, brush))
                 yield return v;
             foreach (var v in BuildOperationVisuals(placement.Part, transform))
                 yield return v;
@@ -63,43 +62,10 @@ public sealed class AssemblyScene3DBuilder
             Math.Max(1, refBok?.Dz ?? 18));
     }
 
-    private IEnumerable<Visual3D> BuildPart(
-        Part part,
-        Transform3D? transform,
-        Brush fill,
-        bool selected,
-        PartFace contactFaceForOutline)
+    private static IEnumerable<Visual3D> BuildPart(Part part, Transform3D? transform, Brush fill)
     {
-        var dx = Math.Max(1, part.Dx);
-        var dy = Math.Max(1, part.Dy);
-        var dz = Math.Max(1, part.Dz);
-
-        var board = new BoxVisual3D
-        {
-            Center = new Point3D(dx / 2.0, dy / 2.0, dz / 2.0),
-            Length = dx,
-            Width = dy,
-            Height = dz,
-            Fill = fill
-        };
-
+        var board = BoardBuilder.BuildBoardVisualForPart(part, fill);
         yield return Wrap(board, transform);
-
-        if (!selected)
-            yield break;
-
-        var outline = new LinesVisual3D { Color = Colors.White, Thickness = 2.5 };
-        var corners = AssemblyPartLayout.GetContactFaceOutline(part, contactFaceForOutline);
-        if (corners.Count >= 4)
-        {
-            for (var i = 0; i < 4; i++)
-            {
-                outline.Points.Add(corners[i]);
-                outline.Points.Add(corners[(i + 1) % 4]);
-            }
-        }
-
-        yield return Wrap(outline, transform);
     }
 
     private static IEnumerable<Visual3D> BuildOperationVisuals(Part part, Transform3D? transform)

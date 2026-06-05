@@ -4,7 +4,7 @@ namespace MaestroGenXcs.Domain;
 
 /// <summary>
 /// Umiestnenie dielca voči referenčnému boku v zostave (rovina Top boku L).
-/// <see cref="OffsetY"/> = os X (od ľavého/spodného okraja boku, mm).
+/// <see cref="OffsetY"/> = os X na ploche Top boku (mm); pri vloženom dne/vrchu môže byť záporná (−dz…0 u vrchu).
 /// <see cref="OffsetDepthMm"/> = os Y (od prednej hrany boku, mm).
 /// </summary>
 public sealed partial class AssemblyPlacement : ObservableObject

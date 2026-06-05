@@ -71,15 +71,26 @@ public partial class AssemblyKolikyDialog : Window
     private readonly TraverzaKolikyApplier.Request _traverzaDefaults;
     private readonly DrillOperation? _editDrill;
     private readonly bool _isEditMode;
+    private readonly PartKind? _kolikPartnerBok;
+    private readonly bool _dnoVrchDualTopMode;
     private bool _populating;
     /// <summary>Hrana s počtom kolíkov v CountY (traverza / priečka), nie v CountX.</summary>
     private bool _edgePatternAlongCountY;
     private bool _suppressPreviewRefresh;
 
-    public AssemblyKolikyDialog(PartFace face, Part? part = null, DrillOperation? editDrill = null)
+    public AssemblyKolikyDialog(
+        PartFace face,
+        Part? part = null,
+        DrillOperation? editDrill = null,
+        PartKind? kolikPartnerBok = null)
     {
         _face = face;
         _part = part;
+        _kolikPartnerBok = kolikPartnerBok is PartKind.BokL or PartKind.BokP ? kolikPartnerBok : null;
+        _dnoVrchDualTopMode = _kolikPartnerBok != null
+            && part != null
+            && DnoVrchTopKolikyHelper.UsesDualTopKoliky(
+                part, face, AssemblyCorpusMode.BokVlozeny);
         _isEdge = face != PartFace.Top;
         // Traverza: vždy Left + Right, nezávisle od kliknutej plochy v náhľade.
         IsTraverzaMode = part != null && TraverzaKolikyApplier.IsTraverzaPart(part);
@@ -146,7 +157,9 @@ public partial class AssemblyKolikyDialog : Window
             HeaderLabel.Text = _part != null
                 ? $"Kolíky · {_part.Name}"
                 : "Kolíky – skladanie zostavy";
-            SubHeaderLabel.Text = $"Plocha {_face.ToWorkplane()} · kontakt voči boku L (Top)";
+            SubHeaderLabel.Text = _dnoVrchDualTopMode && _kolikPartnerBok is { } partner
+                ? $"Plocha Top · kolíky pre {DnoVrchTopKolikyHelper.PartnerLabel(partner)}"
+                : $"Plocha {_face.ToWorkplane()} · kontakt voči boku L (Top)";
 
             FaceLabel.Text = _face.ToWorkplane();
 
@@ -157,17 +170,22 @@ public partial class AssemblyKolikyDialog : Window
             else
                 ConfigureForTop();
 
+            if (_dnoVrchDualTopMode && _part != null && _kolikPartnerBok is { } p)
+                ApplyDnoVrchDualTopDefaults(p);
+
             if (_isEditMode)
                 PopulateFromDrill(_editDrill!);
-            else
+            else if (!_dnoVrchDualTopMode)
             {
                 NameBox.Text = $"Kolik_{_face}_{DateTime.Now:HHmmss}";
                 LoadPatternIntoFields(_currentPatternTpl);
             }
 
-            Title = _part != null
-                ? $"Kolíky – {_part.Name}"
-                : "Kolíky – skladanie zostavy";
+            Title = _dnoVrchDualTopMode && _part != null && _kolikPartnerBok is { } pk
+                ? $"Kolíky – {_part.Name} · {DnoVrchTopKolikyHelper.PartnerLabel(pk)}"
+                : _part != null
+                    ? $"Kolíky – {_part.Name}"
+                    : "Kolíky – skladanie zostavy";
 
             UpdateTemplatePreview();
 
@@ -231,21 +249,14 @@ public partial class AssemblyKolikyDialog : Window
 
         _edgePatternAlongCountY = false;
 
-        NumberOfRowsBox.Text = d.CountY.ToString(CultureInfo.InvariantCulture);
-        NumberOfColumnsBox.Text = d.CountX.ToString(CultureInfo.InvariantCulture);
-        RowsDistanceBox.Text = d.PitchY.ToString("0.###", CultureInfo.InvariantCulture);
-        ColumnDistanceBox.Text = d.PitchX.ToString("0.###", CultureInfo.InvariantCulture);
+        var (gridX, gridY, pitchX, pitchY) = DnoVrchTopKolikyHelper.GetTopGridForPreview(d);
+        NumberOfRowsBox.Text = gridY.ToString(CultureInfo.InvariantCulture);
+        NumberOfColumnsBox.Text = gridX.ToString(CultureInfo.InvariantCulture);
+        RowsDistanceBox.Text = pitchY.ToString("0.###", CultureInfo.InvariantCulture);
+        ColumnDistanceBox.Text = pitchX.ToString("0.###", CultureInfo.InvariantCulture);
 
-        if (d.CountY > 1 && d.CountX == 1)
-        {
-            RadioPlochaY.IsChecked = true;
-            _currentPatternTpl = TemplatePlochaPoY;
-        }
-        else
-        {
-            RadioPlochaX.IsChecked = true;
-            _currentPatternTpl = TemplatePlochaPoX;
-        }
+        RadioPlochaY.IsChecked = true;
+        _currentPatternTpl = TemplatePlochaPoY;
 
         if (ShowOppositeBokOption)
             RadioPreniestNaBok.IsChecked = d.PreniestNaDruhyBok;
@@ -328,6 +339,36 @@ public partial class AssemblyKolikyDialog : Window
     /// UI pre Top: pôvodné správanie – všetky polia viditeľné, raw XCS labely,
     /// radio picker Plocha po X / Plocha po Y.
     /// </summary>
+    private void ApplyDnoVrchDualTopDefaults(PartKind partner)
+    {
+        if (_part == null)
+            return;
+
+        SetRowVisible(LblRefpos, RefposBox, null, Visibility.Collapsed);
+        RefposBox.Text = DnoVrchTopKolikyHelper.GetRefPosOnPanel(_part.Kind, partner)
+            .ToString(CultureInfo.InvariantCulture);
+
+        NameBox.Text = $"Kolik_Top_{partner}";
+        XStartBox.Text = DnoVrchTopKolikyHelper.DefaultXStart(_part, partner)
+            .ToString("0.###", CultureInfo.InvariantCulture);
+        YStartBox.Text = DnoVrchTopKolikyHelper.DefaultYStartMm
+            .ToString("0.###", CultureInfo.InvariantCulture);
+
+        _currentPatternTpl = TemplatePlochaPoY;
+        RadioPlochaY.IsChecked = true;
+        RadioPlochaX.IsChecked = false;
+        PatternPickerForTop.Visibility = Visibility.Collapsed;
+        PatternFixedLabel.Visibility = Visibility.Visible;
+        PatternFixedLabel.Text = "Pattern: od prednej hrany k zadnej (pri ľavej / pravej hrane)";
+
+        NumberOfRowsBox.Text = DnoVrchTopKolikyHelper.DefaultPinCount
+            .ToString(CultureInfo.InvariantCulture);
+        NumberOfColumnsBox.Text = "1";
+        RowsDistanceBox.Text = DnoVrchTopKolikyHelper.DefaultPitchAlongDepthMm
+            .ToString("0.###", CultureInfo.InvariantCulture);
+        ColumnDistanceBox.Text = "0";
+    }
+
     private void ConfigureForTop()
     {
         PatternPickerForTop.Visibility = Visibility.Visible;
@@ -336,7 +377,8 @@ public partial class AssemblyKolikyDialog : Window
 
         SetRowVisible(LblNumberOfRows, NumberOfRowsBox, null, Visibility.Visible);
         SetRowVisible(LblRowsDistance, RowsDistanceBox, UnitRowsDistance, Visibility.Visible);
-        SetRowVisible(LblRefpos, RefposBox, null, Visibility.Visible);
+        var refposVis = _dnoVrchDualTopMode ? Visibility.Collapsed : Visibility.Visible;
+        SetRowVisible(LblRefpos, RefposBox, null, refposVis);
         SetRowVisible(LblYStart, YStartBox, UnitYStart, Visibility.Visible);
 
         LblNumberOfRows.Text = "numberOfRows";
@@ -625,6 +667,20 @@ public partial class AssemblyKolikyDialog : Window
         op.Description = description;
         op.TemplateLabel = _isEdge ? TemplateKolikDoHrany : $"{_processTpl} · {_currentPatternTpl}";
         op.PreniestNaDruhyBok = !ShowOppositeBokOption || RadioPreniestNaBok.IsChecked == true;
+        if (_dnoVrchDualTopMode && _kolikPartnerBok is { } partner && _part != null)
+        {
+            DnoVrchTopKolikyHelper.ApplyStandardTopPattern(
+                op, _part, partner, nRows, rDist, xStart, yStart);
+            op.Name = string.IsNullOrWhiteSpace(NameBox.Text) ? $"Kolik_Top_{partner}" : NameBox.Text.Trim();
+            op.Depth = depth;
+            op.Diameter = 8.0;
+            op.Tool = tool;
+            op.DischargerStep = dStep;
+            op.Description = description;
+            op.TemplateLabel = $"{_processTpl} · {TemplatePlochaPoY}";
+            op.PreniestNaDruhyBok = !ShowOppositeBokOption || RadioPreniestNaBok.IsChecked == true;
+            return;
+        }
     }
 
     /// <summary>

@@ -6,7 +6,6 @@
 
         xmlns:views="clr-namespace:MaestroGenXcs.Views"
         xmlns:vm="clr-namespace:MaestroGenXcs.ViewModels"
-        xmlns:domain="clr-namespace:MaestroGenXcs.Domain"
 
         Title="MaestroGenXcs – skladanie zostavy"
 
@@ -91,6 +90,8 @@
                 <DockPanel>
 
                     <TextBlock DockPanel.Dock="Top" Text="Dielce podľa zostavy" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                    <TextBlock DockPanel.Dock="Top" Opacity="0.65" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="Označ zostavu alebo dielec v strome – skladanie a 3D idú podľa označenej zostavy."/>
 
                     <TreeView x:Name="PartsTreeView"
                               ItemsSource="{Binding PartsTree}"
@@ -102,11 +103,21 @@
                         </TreeView.ItemContainerStyle>
                         <TreeView.Resources>
                             <HierarchicalDataTemplate DataType="{x:Type vm:ZostavaTreeNode}"
-                                                      ItemsSource="{Binding Parts}">
-                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Margin="0,2,0,2"/>
+                                                      ItemsSource="{Binding PartEntries}">
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,2"
+                                            ToolTip="Kliknutím aktivuješ celú zostavu. Zelená fajka = všetky dielce nastavené a vložené.">
+                                    <ContentControl Content="{Binding}"
+                                                    ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </HierarchicalDataTemplate>
-                            <DataTemplate DataType="{x:Type domain:Part}">
-                                <TextBlock Text="{Binding Name}" Padding="4,1,2,1"/>
+                            <DataTemplate DataType="{x:Type vm:PartTreeEntry}">
+                                <StackPanel Orientation="Horizontal"
+                                            ToolTip="Zelená fajka = vložený v 3D a má kolíky. Červený kruh = chýba vloženie alebo kolíky.">
+                                    <ContentControl Content="{Binding}"
+                                                    ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
+                                    <TextBlock Text="{Binding Name}" Padding="0,1,2,1" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </DataTemplate>
                         </TreeView.Resources>
                     </TreeView>

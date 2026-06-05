@@ -31,7 +31,10 @@ namespace MaestroGenXcs.Rendering;
 public sealed class Scene3DBuilder
 {
     private static readonly Brush BoardBrush = new SolidColorBrush(Color.FromRgb(0xDE, 0xB8, 0x87)); // jaseň
-    private static readonly Brush HoleBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+    private static readonly Brush HoleBrush = new SolidColorBrush(Color.FromRgb(0x12, 0x12, 0x12));
+
+    private const double BoardHoleDiameterMm = 8.0;
+    private const double BoardHoleDepthMm = 13.0;
     private static readonly Brush EdgePinBrush = new SolidColorBrush(Color.FromRgb(0xD8, 0x32, 0x32));
     private static readonly Brush ScrewBrush = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
     private static readonly Color FrontEdgeColor = Color.FromRgb(0xFF, 0xA5, 0x00);
@@ -79,7 +82,8 @@ public sealed class Scene3DBuilder
         var dy = Math.Max(1, part.Dy);
         var dz = Math.Max(1, part.Dz);
 
-        var board = BuildBoard(dx, dy, dz);
+        var boardHoles = CollectBoardHoles(part, dx, dy, dz);
+        var board = BuildBoard(dx, dy, dz, boardHoles, BoardBrush);
         LastBoard = board;
         yield return board;
 
@@ -126,22 +130,71 @@ public sealed class Scene3DBuilder
                 continue;
             foreach (var hint in op.BuildVisualHints(dx, dy, dz))
             {
-                var visual = MaterializeHint(hint, dx, dy, dz);
-                if (visual != null)
-                    yield return visual;
-            }
-        }
-
-        if (PreviewDrillOverlay != null)
-        {
-            foreach (var hint in PreviewDrillOverlay.BuildVisualHints(dx, dy, dz))
-            {
+                if (hint is HoleHint h && IsBoardCutoutHole(h))
+                    continue;
                 var visual = MaterializeHint(hint, dx, dy, dz);
                 if (visual != null)
                     yield return visual;
             }
         }
     }
+
+    private readonly record struct BoardHole(double X, double Y, PartFace Face, double Diameter, double Depth);
+
+    private List<BoardHole> CollectBoardHoles(Part part, double dx, double dy, double dz)
+    {
+        var list = new List<BoardHole>();
+        var drills = SelectDrillsForBoardHoles(part.Operations.OfType<DrillOperation>()).ToList();
+
+        if (PreviewDrillOverlay is { IsEnabled: true } preview
+            && preview.Face is PartFace.Top or PartFace.Bottom)
+        {
+            drills = drills
+                .Where(d => d.KolikPartnerBok != preview.KolikPartnerBok)
+                .Append(preview)
+                .ToList();
+        }
+
+        foreach (var drill in drills)
+        {
+            if (HideDrillForPreview != null && ReferenceEquals(drill, HideDrillForPreview))
+                continue;
+
+            foreach (var (wx, wy) in drill.EnumerateWorldTopBottomCenters(dx, dy))
+                TryAddBoardHole(list, new BoardHole(wx, wy, drill.Face, BoardHoleDiameterMm, Math.Min(BoardHoleDepthMm, dz)));
+        }
+
+        return list;
+    }
+
+    private static IEnumerable<DrillOperation> SelectDrillsForBoardHoles(IEnumerable<DrillOperation> all)
+    {
+        var enabled = all
+            .Where(d => d.IsEnabled && !d.IsPropagated)
+            .Where(d => d.Face is PartFace.Top or PartFace.Bottom)
+            .ToList();
+        foreach (var drill in enabled.Where(d => !d.KolikPartnerBok.HasValue))
+            yield return drill;
+        foreach (var group in enabled.Where(d => d.KolikPartnerBok.HasValue).GroupBy(d => d.KolikPartnerBok!.Value))
+            yield return group.Last();
+    }
+
+    private static void TryAddBoardHole(List<BoardHole> list, BoardHole hole)
+    {
+        const double tol = 0.4;
+        foreach (var existing in list)
+        {
+            if (existing.Face != hole.Face)
+                continue;
+            if (Math.Abs(existing.X - hole.X) < tol && Math.Abs(existing.Y - hole.Y) < tol)
+                return;
+        }
+
+        list.Add(hole);
+    }
+
+    private static bool IsBoardCutoutHole(HoleHint h) =>
+        h.Face is PartFace.Top or PartFace.Bottom;
 
     private static Visual3D BuildSelectionOverlay(PartFace face, double dx, double dy, double dz)
     {
@@ -308,18 +361,121 @@ public sealed class Scene3DBuilder
         };
     }
 
-    private static Visual3D BuildBoard(double dx, double dy, double dz)
+    /// <summary>Doska + závrtanie Ø8 / hĺbka 13 (valec + tmavý kruh na ploche) – aj v 3D zostave.</summary>
+    public Visual3D BuildBoardVisualForPart(Part part, Brush boardFill)
     {
-        var center = new Point3D(dx / 2.0, dy / 2.0, dz / 2.0);
-        var box = new BoxVisual3D
+        var dx = Math.Max(1, part.Dx);
+        var dy = Math.Max(1, part.Dy);
+        var dz = Math.Max(1, part.Dz);
+        var holes = CollectBoardHoles(part, dx, dy, dz);
+        return BuildBoard(dx, dy, dz, holes, boardFill);
+    }
+
+    /// <summary>Doska + závrtanie Ø8 / hĺbka 13 (valec + tmavý kruh na ploche).</summary>
+    private static Visual3D BuildBoard(double dx, double dy, double dz, IReadOnlyList<BoardHole> holes, Brush boardFill)
+    {
+        var group = new ModelVisual3D();
+        group.Children.Add(new BoxVisual3D
         {
-            Center = center,
+            Center = new Point3D(dx / 2.0, dy / 2.0, dz / 2.0),
             Length = dx,
             Width = dy,
             Height = dz,
-            Fill = BoardBrush
+            Fill = boardFill
+        });
+
+        foreach (var hole in holes)
+            group.Children.Add(BuildBoardHoleVisual(hole, dz));
+
+        group.Children.Add(BuildBoardEdges(dx, dy, dz));
+        return group;
+    }
+
+    /// <summary>12 hrán dosky (0..Dx, 0..Dy, 0..Dz) – tenké čierne čiary.</summary>
+    private static LinesVisual3D BuildBoardEdges(double dx, double dy, double dz)
+    {
+        var lines = new LinesVisual3D { Color = Colors.Black, Thickness = 1.0 };
+        void Edge(double x1, double y1, double z1, double x2, double y2, double z2)
+        {
+            lines.Points.Add(new Point3D(x1, y1, z1));
+            lines.Points.Add(new Point3D(x2, y2, z2));
+        }
+
+        Edge(0, 0, 0, dx, 0, 0);
+        Edge(dx, 0, 0, dx, dy, 0);
+        Edge(dx, dy, 0, 0, dy, 0);
+        Edge(0, dy, 0, 0, 0, 0);
+
+        Edge(0, 0, dz, dx, 0, dz);
+        Edge(dx, 0, dz, dx, dy, dz);
+        Edge(dx, dy, dz, 0, dy, dz);
+        Edge(0, dy, dz, 0, 0, dz);
+
+        Edge(0, 0, 0, 0, 0, dz);
+        Edge(dx, 0, 0, dx, 0, dz);
+        Edge(dx, dy, 0, dx, dy, dz);
+        Edge(0, dy, 0, 0, dy, dz);
+
+        return lines;
+    }
+
+    private static Visual3D BuildBoardHoleVisual(BoardHole hole, double panelDz)
+    {
+        var depth = Math.Min(hole.Depth, panelDz - 0.1);
+        var isTop = hole.Face == PartFace.Top;
+        var zOpen = isTop ? panelDz : 0;
+        var zBottom = isTop ? panelDz - depth : depth;
+
+        var group = new ModelVisual3D();
+        group.Children.Add(new PipeVisual3D
+        {
+            Point1 = new Point3D(hole.X, hole.Y, zOpen),
+            Point2 = new Point3D(hole.X, hole.Y, zBottom),
+            Diameter = hole.Diameter,
+            InnerDiameter = 0,
+            Fill = HoleBrush
+        });
+        group.Children.Add(BuildHoleOpeningDisc(hole, zOpen, isTop));
+        return group;
+    }
+
+    private static ModelVisual3D BuildHoleOpeningDisc(BoardHole hole, double zSurface, bool faceUp)
+    {
+        const int segments = 36;
+        var radius = hole.Diameter / 2.0;
+        var z = zSurface + (faceUp ? 0.35 : -0.35);
+        var mesh = new MeshBuilder(false, true);
+        var hub = new Point3D(hole.X, hole.Y, z);
+        for (var i = 0; i < segments; i++)
+        {
+            var a0 = 2.0 * Math.PI * i / segments;
+            var a1 = 2.0 * Math.PI * (i + 1) / segments;
+            var p0 = new Point3D(hole.X + radius * Math.Cos(a0), hole.Y + radius * Math.Sin(a0), z);
+            var p1 = new Point3D(hole.X + radius * Math.Cos(a1), hole.Y + radius * Math.Sin(a1), z);
+            if (faceUp)
+                mesh.AddTriangle(hub, p0, p1);
+            else
+                mesh.AddTriangle(hub, p1, p0);
+        }
+
+        var brush = HoleBrush;
+        var material = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(brush),
+                new EmissiveMaterial(brush)
+            }
         };
-        return box;
+        return new ModelVisual3D
+        {
+            Content = new GeometryModel3D
+            {
+                Geometry = mesh.ToMesh(),
+                Material = material,
+                BackMaterial = material
+            }
+        };
     }
 
     private IEnumerable<Visual3D> BuildAxes(double dx, double dy, double dz)
@@ -451,8 +607,11 @@ public sealed class Scene3DBuilder
     public static Visual3D? CreateVisualFromHint(VisualHint hint, double dx, double dy, double dz) =>
         MaterializeHint(hint, dx, dy, dz);
 
-    private static Visual3D BuildHole(HoleHint h, double dx, double dy, double dz)
+    private static Visual3D? BuildHole(HoleHint h, double dx, double dy, double dz)
     {
+        if (IsBoardCutoutHole(h))
+            return null;
+
         // Otvor zobrazujeme ako valec posunutý "do dosky" smerom kolmo
         // na danú plochu. Pri hranových kolíkoch kreslíme fyzický kolík:
         // 35 mm celkom = 22 mm v hrane + 13 mm vytŕča von.
@@ -546,7 +705,7 @@ public sealed class Scene3DBuilder
                 ? EdgePinBrush
                 : HoleBrush;
 
-        return new PipeVisual3D
+        var pipe = new PipeVisual3D
         {
             Point1 = start,
             Point2 = end,
@@ -554,6 +713,8 @@ public sealed class Scene3DBuilder
             InnerDiameter = 0,
             Fill = brush
         };
+
+        return pipe;
     }
 
     private static Visual3D BuildLine(LineHint l)

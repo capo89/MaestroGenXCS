@@ -37,6 +37,7 @@ public partial class PartEditorWindow : Window
 
         _vm.SelectedPart = part;
         Title = $"Editor dielca – {part.Name}";
+        WirePartOperationsChanged(part);
 
         if (PolicaKolikyApplier.IsPolicaPart(part) || TraverzaKolikyApplier.IsTraverzaPart(part))
         {
@@ -53,6 +54,30 @@ public partial class PartEditorWindow : Window
             RebuildScene(resetCamera: true);
             RefreshOperationsList();
         };
+    }
+
+    private void WirePartOperationsChanged(Part part)
+    {
+        part.Operations.CollectionChanged -= OnPartOperationsChanged;
+        part.Operations.CollectionChanged += OnPartOperationsChanged;
+    }
+
+    private void OnPartOperationsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender; _ = e;
+        if (_suppressEditEvents)
+            return;
+        Dispatcher.BeginInvoke(() => RebuildScene(resetCamera: false),
+            System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void AfterKolikySaved(PartFace face)
+    {
+        _selectedFace = null;
+        RefreshOperationsList();
+        RebuildScene(resetCamera: false);
+        if (face == PartFace.Top)
+            SetTopView();
     }
 
     private void RebuildScene(bool resetCamera)
@@ -280,13 +305,18 @@ public partial class PartEditorWindow : Window
         if (dlg.ShowDialog() != true || dlg.Result == null)
             return;
 
-        _vm.SaveDrillOperation(dlg.Result, isNew: existing == null);
-        RefreshOperationsList();
-        RebuildScene(resetCamera: false);
+        _vm.SaveDrillOperation(dlg.Result, isNew: existing == null, targetPart: _part);
+        AfterKolikySaved(face);
     }
 
     private void OpenTopKoliky(PartFace face)
     {
+        if (_vm.UsesDnoVrchDualTopKoliky(_part, face))
+        {
+            OpenDnoVrchDualTopKoliky();
+            return;
+        }
+
         var existing = _vm.FindEditableDrill(_part, face);
         var dlg = new AssemblyKolikyDialog(face, _part, existing) { Owner = this };
         if (dlg.ShowDialog() != true)
@@ -298,10 +328,27 @@ public partial class PartEditorWindow : Window
                 MessageBox.Show(this, _vm.StatusText, "Traverza", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         else if (dlg.Result != null)
-            _vm.SaveDrillOperation(dlg.Result, isNew: existing == null);
+            _vm.SaveDrillOperation(dlg.Result, isNew: existing == null, targetPart: _part);
 
-        RefreshOperationsList();
-        RebuildScene(resetCamera: false);
+        AfterKolikySaved(face);
+    }
+
+    private void OpenDnoVrchDualTopKoliky()
+    {
+        foreach (var partner in new[] { PartKind.BokL, PartKind.BokP })
+        {
+            var existing = _vm.FindEditableDrill(_part, PartFace.Top, partner);
+            var dlg = new AssemblyKolikyDialog(PartFace.Top, _part, existing, partner) { Owner = this };
+            if (dlg.ShowDialog() != true)
+                return;
+
+            if (dlg.Result == null)
+                continue;
+
+            _vm.SaveDrillOperation(dlg.Result, isNew: existing == null, targetPart: _part);
+        }
+
+        AfterKolikySaved(PartFace.Top);
     }
 
     private void OpenTraverzaKoliky()

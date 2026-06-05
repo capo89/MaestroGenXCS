@@ -10,6 +10,10 @@
 
         <ResourceDictionary>
 
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Views/SetupStatusIcon.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
             <SolidColorBrush x:Key="Brush.Background"     Color="#FF1E1E1E"/>

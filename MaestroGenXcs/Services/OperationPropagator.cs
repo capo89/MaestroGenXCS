@@ -39,6 +39,10 @@ public sealed class OperationPropagator
 
     private bool IsSuppressed => _suppressDepth > 0;
 
+    /// <summary>Po <see cref="ExecuteWithoutPropagation"/> pridá kolík a bezpečne premietne na partnerov.</summary>
+    public void PropagateDrillAdded(Part srcPart, DrillOperation drill) =>
+        PropagateOnAdd(srcPart, drill);
+
     public OperationPropagator(PartsStore store)
     {
         _store = store;
@@ -113,14 +117,17 @@ public sealed class OperationPropagator
 
     private void RemoveMirrorsForConnection(Connection c)
     {
-        foreach (var part in _store.Parts.ToList())
+        ExecuteWithoutPropagation(() =>
         {
-            var toRemove = part.Operations
-                .Where(op => op.SourceConnectionId == c.Id)
-                .ToList();
-            foreach (var op in toRemove)
-                part.Operations.Remove(op);
-        }
+            foreach (var part in _store.Parts.ToList())
+            {
+                var toRemove = part.Operations
+                    .Where(op => op.SourceConnectionId == c.Id)
+                    .ToList();
+                foreach (var op in toRemove)
+                    part.Operations.Remove(op);
+            }
+        });
     }
 
     private void OnOperationsChanged(Part part, NotifyCollectionChangedEventArgs e)
@@ -149,6 +156,8 @@ public sealed class OperationPropagator
     private void PropagateOnAdd(Part srcPart, CncOperation srcOp)
     {
         if (srcOp is not DrillOperation drill) return;
+        if (drill.IsPropagated)
+            return;
         if (srcPart.Kind == PartKind.Traverza || drill.IsTraverzaMaster)
             return;
         if (drill.IsPolicaMaster || drill.TemplateLabel == PolicaDrillingDefaults.BundleTemplateLabel)
@@ -156,9 +165,23 @@ public sealed class OperationPropagator
 
         foreach (var conn in MatchingConnections(srcPart, srcOp.Face))
         {
+            if (!ConnectionMatchesKolikPartner(conn, srcPart, drill))
+                continue;
             if (ShouldPropagate(conn, drill))
                 CreateMirror(conn, drill, srcOrigin: srcPart);
         }
+    }
+
+    private static bool ConnectionMatchesKolikPartner(Connection conn, Part srcPart, DrillOperation drill)
+    {
+        if (drill.KolikPartnerBok is not { } partner)
+            return true;
+
+        Part? other = ReferenceEquals(conn.PartA, srcPart) ? conn.PartB
+            : ReferenceEquals(conn.PartB, srcPart) ? conn.PartA
+            : null;
+
+        return other?.Kind == partner;
     }
 
     private static bool ShouldPropagate(Connection conn, DrillOperation src)
@@ -178,8 +201,11 @@ public sealed class OperationPropagator
             var toRemove = part.Operations
                 .Where(op => op.SourceOperationId == srcOp.Id)
                 .ToList();
-            foreach (var m in toRemove)
-                part.Operations.Remove(m);
+            ExecuteWithoutPropagation(() =>
+            {
+                foreach (var m in toRemove)
+                    part.Operations.Remove(m);
+            });
         }
     }
 
@@ -221,7 +247,7 @@ public sealed class OperationPropagator
 
         var mirror = WorkplaneMapper.MapDrillPattern(
             src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates, target.Dz);
-        target.Operations.Add(mirror);
+        ExecuteWithoutPropagation(() => target.Operations.Add(mirror));
         StatusMessage?.Invoke(this, $"Operácia premietnutá na {target.Name} ({targetFace}).");
     }
 
@@ -284,6 +310,7 @@ public sealed class OperationPropagator
             bool fromA = owner == conn.PartA && src.Face == conn.FaceA;
             bool fromB = owner == conn.PartB && src.Face == conn.FaceB;
             if (!fromA && !fromB) continue;
+            if (!ConnectionMatchesKolikPartner(conn, owner, src)) continue;
             if (!ShouldPropagate(conn, src)) continue;
 
             var target       = fromA ? conn.PartB : conn.PartA;
@@ -299,7 +326,7 @@ public sealed class OperationPropagator
                 src, targetFace, targetRefpos, conn.Id, conn.IdentityCoordinates, target.Dz);
 
             if (existing == null)
-                target.Operations.Add(fresh);
+                ExecuteWithoutPropagation(() => target.Operations.Add(fresh));
             else
             {
                 CopyDrillState(fresh, existing);
@@ -334,6 +361,7 @@ public sealed class OperationPropagator
         to.IsTraverzaMaster = from.IsTraverzaMaster;
         to.PreniestNaDruhyBok = from.PreniestNaDruhyBok;
         to.IsPolicaMaster = from.IsPolicaMaster;
+        to.KolikPartnerBok = from.KolikPartnerBok;
     }
 
     private static Guid GetRootSourceId(DrillOperation op) => op.SourceOperationId ?? op.Id;
