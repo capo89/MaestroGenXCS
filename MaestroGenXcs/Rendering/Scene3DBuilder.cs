@@ -36,7 +36,7 @@ public sealed class Scene3DBuilder
     private const double BoardHoleDiameterMm = 8.0;
     private const double BoardHoleDepthMm = 13.0;
     private static readonly Brush EdgePinBrush = new SolidColorBrush(Color.FromRgb(0xD8, 0x32, 0x32));
-    private static readonly Brush ScrewBrush = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+    private static readonly Brush PredvrtavanieBrush = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
     private static readonly Color FrontEdgeColor = Color.FromRgb(0xFF, 0xA5, 0x00);
 
     public bool ShowAxisLabels { get; set; } = true;
@@ -130,7 +130,7 @@ public sealed class Scene3DBuilder
                 continue;
             foreach (var hint in op.BuildVisualHints(dx, dy, dz))
             {
-                if (hint is HoleHint h && IsBoardCutoutHole(h))
+                if (hint is HoleHint h && IsBoardCutoutHole(h) && !IsPredvrtavanieHint(h))
                     continue;
                 var visual = MaterializeHint(hint, dx, dy, dz);
                 if (visual != null)
@@ -171,6 +171,7 @@ public sealed class Scene3DBuilder
     {
         var enabled = all
             .Where(d => d.IsEnabled && !d.IsPropagated)
+            .Where(d => !d.PreviewAsPredvrtavanie)
             .Where(d => d.Face is PartFace.Top or PartFace.Bottom)
             .ToList();
         foreach (var drill in enabled.Where(d => !d.KolikPartnerBok.HasValue))
@@ -195,6 +196,9 @@ public sealed class Scene3DBuilder
 
     private static bool IsBoardCutoutHole(HoleHint h) =>
         h.Face is PartFace.Top or PartFace.Bottom;
+
+    private static bool IsPredvrtavanieHint(HoleHint h) =>
+        string.Equals(h.Tag, VisualHintTags.Predvrtavanie, StringComparison.OrdinalIgnoreCase);
 
     private static Visual3D BuildSelectionOverlay(PartFace face, double dx, double dy, double dz)
     {
@@ -609,8 +613,11 @@ public sealed class Scene3DBuilder
 
     private static Visual3D? BuildHole(HoleHint h, double dx, double dy, double dz)
     {
-        if (IsBoardCutoutHole(h))
+        if (IsBoardCutoutHole(h) && !IsPredvrtavanieHint(h))
             return null;
+
+        if (IsPredvrtavanieHint(h))
+            return BuildPredvrtavanie(h, dx, dy, dz);
 
         // Otvor zobrazujeme ako valec posunutý "do dosky" smerom kolmo
         // na danú plochu. Pri hranových kolíkoch kreslíme fyzický kolík:
@@ -700,7 +707,7 @@ public sealed class Scene3DBuilder
         }
 
         var brush = string.Equals(h.Tag, "screw", StringComparison.OrdinalIgnoreCase)
-            ? ScrewBrush
+            ? PredvrtavanieBrush
             : drawEdgePin
                 ? EdgePinBrush
                 : HoleBrush;
@@ -715,6 +722,57 @@ public sealed class Scene3DBuilder
         };
 
         return pipe;
+    }
+
+    /// <summary>Predvŕtanie – červený piest len na povrchu (XCS hĺbka sa nerieši v 3D).</summary>
+    private static Visual3D BuildPredvrtavanie(HoleHint h, double dx, double dy, double dz)
+    {
+        var radius = Math.Max(0.5, h.Diameter / 2.0);
+        var protrude = VisualHintTags.PredvrtavanieNadPlochouMm;
+        var into = Math.Max(0.5, h.Depth);
+
+        Point3D outer;
+        Point3D inner;
+        switch (h.Face)
+        {
+            case PartFace.Top:
+                outer = new Point3D(h.X, h.Y, dz + protrude);
+                inner = new Point3D(h.X, h.Y, dz - into);
+                break;
+            case PartFace.Bottom:
+                outer = new Point3D(h.X, h.Y, -protrude);
+                inner = new Point3D(h.X, h.Y, into);
+                break;
+            case PartFace.Left:
+                outer = new Point3D(-protrude, h.X, h.Y);
+                inner = new Point3D(into, h.X, h.Y);
+                break;
+            case PartFace.Right:
+                outer = new Point3D(dx + protrude, h.X, h.Y);
+                inner = new Point3D(dx - into, h.X, h.Y);
+                break;
+            case PartFace.Front:
+                outer = new Point3D(h.X, -protrude, h.Y);
+                inner = new Point3D(h.X, into, h.Y);
+                break;
+            case PartFace.Back:
+                outer = new Point3D(h.X, dy + protrude, h.Y);
+                inner = new Point3D(h.X, dy - into, h.Y);
+                break;
+            default:
+                outer = new Point3D(h.X, h.Y, dz + protrude);
+                inner = new Point3D(h.X, h.Y, dz - into);
+                break;
+        }
+
+        return new PipeVisual3D
+        {
+            Point1 = outer,
+            Point2 = inner,
+            Diameter = radius * 2,
+            InnerDiameter = 0,
+            Fill = PredvrtavanieBrush,
+        };
     }
 
     private static Visual3D BuildLine(LineHint l)

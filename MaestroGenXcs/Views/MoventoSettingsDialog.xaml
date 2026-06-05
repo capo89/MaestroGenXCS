@@ -1,0 +1,86 @@
+<Window x:Class="MaestroGenXcs.Views.MoventoSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Movento"
+        SizeToContent="WidthAndHeight"
+        MinWidth="420"
+        MaxWidth="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Style="{StaticResource PanelSecondaryButton}" Content="Zrušiť" IsCancel="True" MinWidth="80" Margin="0,0,8,0"/>
+            <Button Style="{StaticResource ToolbarButton}" Content="OK" IsDefault="True" Click="OnOk_Click" MinWidth="80"/>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock FontWeight="Bold" FontSize="14" Text="Blum Movento"/>
+            <TextBlock x:Name="ZostavaLabel" Opacity="0.8" Margin="0,4,0,8"/>
+            <TextBlock Opacity="0.65" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                       Text="Montážne vŕtanie na Top boku L (refpos 2) a P (refpos 0). Po OK sa diery zobrazia na boku L v 3D."/>
+
+            <Button Style="{StaticResource PanelSecondaryButton}" Content="+ Pridať šufľu"
+                    Click="OnAddSekcia_Click" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+
+            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="SekcieList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                    Background="#FF1A2430" Padding="8" Margin="0,0,0,8" CornerRadius="3">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Nazov}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Výška (mm)" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding VyskaMm, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}"
+                                                 Margin="6,0,0,0" Padding="4,3"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Odsadenie od predu (mm)" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding OdsadenieOdPreduMm, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}"
+                                                 Margin="6,0,0,0" Padding="4,3"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Počet kovaní" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding PocetKovani, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="6,0,0,0" Padding="4,3"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Dĺžka kovania" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" Margin="6,0,0,0" Padding="4,3"
+                                                  SelectedValue="{Binding DlzkaKovania, Mode=TwoWay}"
+                                                  SelectedValuePath="Hodnota"
+                                                  DisplayMemberPath="Label"
+                                                  ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DlzkaChoices}"/>
+                                    </Grid>
+                                    <Button Style="{StaticResource PanelSecondaryButton}" Content="Odstrániť"
+                                            Click="OnRemoveSekcia_Click" Tag="{Binding}"
+                                            HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </DockPanel>
+</Window>

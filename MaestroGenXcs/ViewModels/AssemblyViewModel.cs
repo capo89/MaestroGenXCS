@@ -313,6 +313,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         RebuildPartsTree();
         WireAllSetupRefreshHooks();
         EnsureSelectedZostavaStillValid();
+        TryInferCorpusModeForAllZostavy();
         OnPropertyChanged(nameof(SelectedPlacement));
         OnPropertyChanged(nameof(ReferenceBokText));
         OnPropertyChanged(nameof(HasSelectedZostava));
@@ -479,11 +480,40 @@ public sealed partial class AssemblyViewModel : ObservableObject
     private void SetCorpusModeForSelectedZostava(AssemblyCorpusMode mode)
     {
         var zostava = ActiveZostava;
-        var ctx = _assemblyStore.GetContext(zostava);
-        if (ctx == null)
+        ApplyCorpusMode(zostava, mode, "nastavený");
+    }
+
+    private void TryInferAndApplyCorpusMode(string? zostava)
+    {
+        if (string.IsNullOrWhiteSpace(zostava))
             return;
 
-        if (ctx.CorpusMode == mode)
+        var parts = _store.Parts.Where(p =>
+            string.Equals(p.Zostava, zostava, StringComparison.OrdinalIgnoreCase));
+        var inferred = CorpusModeDetector.Infer(parts);
+        if (inferred is not { } mode)
+            return;
+
+        var ctx = _assemblyStore.GetContext(zostava);
+        if (ctx == null || ctx.CorpusMode == mode)
+            return;
+
+        ApplyCorpusMode(zostava, mode, "podľa kolíkov");
+    }
+
+    private void TryInferCorpusModeForAllZostavy()
+    {
+        foreach (var zostava in _store.Parts
+                     .Select(p => p.Zostava)
+                     .Where(z => !string.IsNullOrWhiteSpace(z))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            TryInferAndApplyCorpusMode(zostava);
+    }
+
+    private void ApplyCorpusMode(string? zostava, AssemblyCorpusMode mode, string reason)
+    {
+        var ctx = _assemblyStore.GetContext(zostava);
+        if (ctx == null || ctx.CorpusMode == mode)
             return;
 
         ctx.CorpusMode = mode;
@@ -491,7 +521,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         _store.RegenerateConnections();
         OnPropertyChanged(nameof(SelectedCorpusMode));
         Scene3DRefreshRequested?.Invoke(this, EventArgs.Empty);
-        StatusText = $"Zostava „{zostava}“: {CorpusModeLabel(mode)}.";
+        StatusText = $"Zostava „{zostava}“: {CorpusModeLabel(mode)} ({reason}).";
     }
 
     private static string CorpusModeLabel(AssemblyCorpusMode mode) =>
@@ -535,6 +565,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
             _propagator.ExecuteWithoutPropagation(() => part.Operations.Add(op));
             _propagator.PropagateDrillAdded(part, op);
         }
+
+        TryInferAndApplyCorpusMode(part.Zostava);
 
         RefreshTreeSetupStatus();
         StatusText = isNew
@@ -767,6 +799,41 @@ public sealed partial class AssemblyViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenMovento()
+    {
+        var zostava = ActiveZostava;
+        if (string.IsNullOrWhiteSpace(zostava))
+        {
+            StatusText = "V strome označ zostavu alebo dielec.";
+            WpfMsg.Show(
+                "V strome označ zostavu alebo dielec, pre ktorú chceš nastaviť šufle Movento.",
+                "Movento",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dlg = new Views.MoventoSettingsDialog(this, zostava)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+        if (dlg.ShowDialog() != true)
+            return;
+
+        var ctx = GetAssemblyContext(zostava);
+        if (ctx == null)
+        {
+            StatusText = "Zostava nemá kontext skladania.";
+            return;
+        }
+
+        MoventoKolikyApplier.Apply(_store, ctx, zostava);
+        StatusText = $"Movento – zostava „{zostava}“: {ctx.MoventoSekcie.Count} šuflí aplikovaných na boky.";
+        RefreshTreeSetupStatus();
+        NotifySceneRefresh();
+    }
+
+    [RelayCommand]
     private void ApplyAssembly()
     {
         var zostava = ActiveZostava;
@@ -786,6 +853,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         try
         {
             AssemblySolverApplier.Apply(_store, ctx, _propagator);
+            MoventoKolikyApplier.Apply(_store, ctx, zostava);
             StatusText = $"Zostava „{zostava}“: prepocítané ({ctx.Placements.Count} umiestnení).";
             RefreshTreeSetupStatus();
             NotifySceneRefresh();
@@ -896,6 +964,12 @@ public sealed partial class AssemblyViewModel : ObservableObject
         foreach (var c in name)
             sb.Append(invalid.Contains(c) ? '_' : c);
         return sb.ToString().Trim();
+    }
+
+    public void RemovePartOperations(Part part, IEnumerable<CncOperation> operations)
+    {
+        MoventoKolikyApplier.RemoveWithPartnerMirror(_store, part, operations);
+        NotifySceneRefresh();
     }
 
     public void NotifySceneRefresh()

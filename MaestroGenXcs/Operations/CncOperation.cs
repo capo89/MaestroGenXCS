@@ -104,3 +104,13 @@ public sealed record LineHint(
     double Y2,
     double Z2,
     string? Tag = null) : VisualHint;
+
+/// <summary>Tagy a parametre 3D náhľadu (nezávislé od XCS exportu).</summary>
+public static class VisualHintTags
+{
+    /// <summary>Predvŕtanie kovania – červený piest na povrchu, nie diera v doske.</summary>
+    public const string Predvrtavanie = "predvrtavanie";
+
+    /// <summary>Koľko mm predvŕtanie trčí nad povrchom dielca v 3D (iba vizuál).</summary>
+    public const double PredvrtavanieNadPlochouMm = 5.0;
+}

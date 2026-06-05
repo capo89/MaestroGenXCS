@@ -55,6 +55,10 @@ public sealed partial class DrillOperation : CncOperation
     [ObservableProperty]
     private string _templateLabel = "";
 
+    /// <summary>3D náhľad ako predvŕtanie na povrchu (XCS hĺbka ostáva v <see cref="Depth"/>).</summary>
+    [ObservableProperty]
+    private bool _previewAsPredvrtavanie;
+
     /// <summary>Bok L/P Right/Left: či propagovať aj na druhý bok (ak je spoj v mape).</summary>
     [ObservableProperty]
     private bool _preniestNaDruhyBok = true;
@@ -135,6 +139,23 @@ public sealed partial class DrillOperation : CncOperation
 
     public override IEnumerable<VisualHint> BuildVisualHints(double dx, double dy, double dz)
     {
+        if (PreviewAsPredvrtavanie)
+        {
+            foreach (var (wx, wy) in EnumeratePredvrtavanieCenters(dx, dy))
+            {
+                yield return new HoleHint(
+                    X: wx,
+                    Y: wy,
+                    Z: 0,
+                    Face: Face,
+                    Diameter: Diameter,
+                    Depth: Depth,
+                    Tag: VisualHintTags.Predvrtavanie);
+            }
+
+            yield break;
+        }
+
         if (IsEdgeFace(Face))
         {
             foreach (var (wx, wy) in EnumerateEdgeTopViewPoints(dx, dy, dz))
@@ -203,6 +224,9 @@ public sealed partial class DrillOperation : CncOperation
             };
         }
     }
+
+    private IEnumerable<(double X, double Y)> EnumeratePredvrtavanieCenters(double dx, double dy) =>
+        EnumerateWorldTopBottomCenters(dx, dy);
 
     /// <summary>Stredy kolíkov na ploche Top/Bottom v mm (0..Dx, 0..Dy).</summary>
     public IEnumerable<(double X, double Y)> EnumerateWorldTopBottomCenters(double dx, double dy)

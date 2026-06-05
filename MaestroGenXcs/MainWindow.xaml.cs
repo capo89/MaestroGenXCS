@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Services;
 using MaestroGenXcs.ViewModels;
@@ -11,8 +12,6 @@ namespace MaestroGenXcs;
 
 public partial class MainWindow : Window
 {
-    private Assembly3DWindow? _assembly3DWindow;
-
     private bool _syncingTreeSelection;
 
     /// <summary>Po kliknutí na uzol „Zostava …“ v strome neprepísať výber na dielec.</summary>
@@ -24,12 +23,12 @@ public partial class MainWindow : Window
         var vm = new AssemblyViewModel();
         DataContext = vm;
         vm.PropertyChanged += OnViewModelPropertyChanged;
-        Loaded += (_, _) => SyncTreeSelectionToSelectedPart();
-        Closed += (_, _) =>
+        Loaded += (_, _) =>
         {
-            _assembly3DWindow?.Close();
-            TemplateStore.Instance.SaveNow();
+            Assembly3DView.Attach(vm);
+            SyncTreeSelectionToSelectedPart();
         };
+        Closed += (_, _) => TemplateStore.Instance.SaveNow();
     }
 
     private AssemblyViewModel Vm => (AssemblyViewModel)DataContext;
@@ -56,6 +55,25 @@ public partial class MainWindow : Window
         {
             _syncingTreeSelection = false;
         }
+    }
+
+    private void OnTreeItemPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is TreeViewItem item)
+        {
+            item.IsSelected = true;
+            item.Focus();
+        }
+    }
+
+    private void OnShowPartOperations_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: PartTreeEntry entry })
+            return;
+
+        Vm.SelectedPart = entry.Part;
+        var win = new PartOperationsListWindow(entry.Part, Vm) { Owner = this };
+        win.Show();
     }
 
     private void OnPartsTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -140,23 +158,4 @@ public partial class MainWindow : Window
             return;
         }
     }
-
-    private void OnOpen3D_Click(object sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        if (_assembly3DWindow == null)
-        {
-            _assembly3DWindow = new Assembly3DWindow { Owner = this };
-            _assembly3DWindow.Closed += (_, _) => _assembly3DWindow = null;
-            _assembly3DWindow.Attach(Vm);
-            _assembly3DWindow.Show();
-        }
-        else
-        {
-            if (_assembly3DWindow.WindowState == WindowState.Minimized)
-                _assembly3DWindow.WindowState = WindowState.Normal;
-            _assembly3DWindow.Activate();
-        }
-    }
-
 }

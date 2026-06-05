@@ -9,9 +9,9 @@
 
         Title="MaestroGenXcs – skladanie zostavy"
 
-        Height="640" Width="1000"
+        Height="720" Width="1200"
 
-        MinHeight="480" MinWidth="800">
+        MinHeight="520" MinWidth="900">
 
     <DockPanel Margin="8">
 
@@ -39,11 +39,11 @@
 
                             ToolTip="Pridať alebo aktualizovať obeh podľa ABS"/>
 
-                    <Button Style="{StaticResource ToolbarButton}" Content="3D zostava"
+                    <Button Style="{StaticResource ToolbarButton}" Content="Movento"
 
-                            Click="OnOpen3D_Click"
+                            Command="{Binding OpenMoventoCommand}"
 
-                            ToolTip="3D pohľad celej zostavy s kolíkmi"/>
+                            ToolTip="Nastavenie šuflí Blum Movento pre označenú zostavu"/>
 
                     <Button Style="{StaticResource ToolbarButton}" Content="Export XCS"
 
@@ -99,6 +99,7 @@
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnTreeItemPreviewMouseRightButtonDown"/>
                             </Style>
                         </TreeView.ItemContainerStyle>
                         <TreeView.Resources>
@@ -114,6 +115,15 @@
                             <DataTemplate DataType="{x:Type vm:PartTreeEntry}">
                                 <StackPanel Orientation="Horizontal"
                                             ToolTip="Zelená fajka = vložený v 3D a má kolíky. Červený kruh = chýba vloženie alebo kolíky.">
+                                    <StackPanel.ContextMenu>
+                                        <ContextMenu Background="{StaticResource Brush.PanelHeader}"
+                                                     BorderBrush="{StaticResource Brush.Border}"
+                                                     BorderThickness="1" Padding="2">
+                                            <MenuItem Header="Zoznam operácií"
+                                                      Foreground="{StaticResource Brush.Foreground}"
+                                                      Click="OnShowPartOperations_Click"/>
+                                        </ContextMenu>
+                                    </StackPanel.ContextMenu>
                                     <ContentControl Content="{Binding}"
                                                     ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
                                     <TextBlock Text="{Binding Name}" Padding="0,1,2,1" VerticalAlignment="Center"/>
@@ -126,96 +136,7 @@
 
             </Border>
 
-            <ScrollViewer Grid.Column="1" Margin="8,0,0,0" VerticalScrollBarVisibility="Auto">
-
-                <StackPanel>
-
-                    <Border Background="{StaticResource Brush.Panel}"
-
-                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" Padding="12" Margin="0,0,0,8">
-
-                        <StackPanel>
-
-                            <TextBlock Text="Vybraný dielec" FontWeight="SemiBold" Margin="0,0,0,8"/>
-
-                            <TextBlock Opacity="0.85">
-
-                                <Run Text="Názov: "/>
-
-                                <Run Text="{Binding SelectedPart.Name, Mode=OneWay, FallbackValue=–}"/>
-
-                            </TextBlock>
-
-                            <TextBlock Margin="0,4,0,0" Opacity="0.85">
-
-                                <Run Text="Zostava: "/><Run Text="{Binding SelectedZostavaText, Mode=OneWay}"/>
-
-                                <Run Text="   Typ: "/><Run Text="{Binding SelectedKindText, Mode=OneWay}"/>
-
-                            </TextBlock>
-
-                            <TextBlock Margin="0,4,0,0" Opacity="0.85">
-
-                                <Run Text="DX: "/><Run Text="{Binding SelectedDx, Mode=OneWay}"/>
-
-                                <Run Text="   DY: "/><Run Text="{Binding SelectedDy, Mode=OneWay}"/>
-
-                                <Run Text="   DZ: "/><Run Text="{Binding SelectedDz, Mode=OneWay}"/>
-
-                            </TextBlock>
-
-                            <TextBlock Margin="0,4,0,0" Opacity="0.7">
-
-                                <Run Text="Počet operácií: "/>
-
-                                <Run Text="{Binding SelectedPart.Operations.Count, Mode=OneWay, FallbackValue=0}"/>
-
-                            </TextBlock>
-
-                            <TextBlock Margin="0,12,0,4" Opacity="0.85">
-
-                                <Run Text="Referenčný bok: "/>
-
-                                <Run Text="{Binding ReferenceBokText, Mode=OneWay}"/>
-
-                            </TextBlock>
-
-                            <StackPanel Margin="0,8,0,0"
-                                        IsEnabled="{Binding HasSelectedZostava}">
-
-                                <TextBlock Text="Režim korpusu" FontWeight="SemiBold" Margin="0,0,0,4"/>
-
-                                <ComboBox ItemsSource="{Binding CorpusModeChoices}"
-                                          SelectedValue="{Binding SelectedCorpusMode}"
-                                          SelectedValuePath="Mode"
-                                          DisplayMemberPath="Label"
-                                          Padding="6,4"/>
-
-                            </StackPanel>
-
-                            <StackPanel Visibility="{Binding HasSelectedPlacement, Converter={StaticResource BoolToVis}}">
-
-                                <TextBlock Text="Výška umiestnenia (mm, od spodu)" FontWeight="SemiBold" Margin="0,0,0,4"/>
-
-                                <TextBox Text="{Binding SelectedPlacement.OffsetY, UpdateSourceTrigger=PropertyChanged}"
-
-                                         Padding="6,4" Margin="0,0,0,4"/>
-
-                                <TextBlock Opacity="0.55" FontSize="11" TextWrapping="Wrap"
-
-                                           Text="Zmeň výšku → Prepocítaj zostavu (polica / traverza)."/>
-
-                            </StackPanel>
-
-                        </StackPanel>
-
-                    </Border>
-
-                    <views:PolicaSettingsPanel Visibility="{Binding IsPolicaSelected, Converter={StaticResource BoolToVis}}"/>
-
-                </StackPanel>
-
-            </ScrollViewer>
+            <views:Assembly3DPanel x:Name="Assembly3DView" Grid.Column="1" Margin="8,0,0,0"/>
 
         </Grid>
 

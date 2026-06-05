@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MaestroGenXcs.Sufle;
 
 namespace MaestroGenXcs.Domain;
 
@@ -18,4 +19,7 @@ public sealed partial class AssemblyContext : ObservableObject
     private AssemblyCorpusMode _corpusMode = AssemblyCorpusMode.BokVlozeny;
 
     public ObservableCollection<AssemblyPlacement> Placements { get; } = new();
+
+    /// <summary>Sekcie šuflí Blum Movento v tejto zostave.</summary>
+    public ObservableCollection<SufelMoventoSekcia> MoventoSekcie { get; } = new();
 }

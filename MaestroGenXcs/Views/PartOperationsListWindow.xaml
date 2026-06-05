@@ -1,0 +1,88 @@
+<Window x:Class="MaestroGenXcs.Views.PartOperationsListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Zoznam operácií"
+        Height="480" Width="520"
+        MinHeight="320" MinWidth="400"
+        Background="{StaticResource Brush.Background}"
+        Foreground="{StaticResource Brush.Foreground}"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="DeleteButton" Style="{StaticResource ToolbarButton}"
+                    Content="Vymazať operáciu" Click="OnDelete_Click"
+                    MinWidth="130" Margin="0,0,8,0" IsEnabled="False"/>
+            <Button Style="{StaticResource ToolbarButton}" Content="Zavrieť"
+                    IsDefault="True" Click="OnClose_Click" MinWidth="90"/>
+        </StackPanel>
+
+        <Border DockPanel.Dock="Top" Background="{StaticResource Brush.PanelHeader}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                Padding="10" Margin="0,0,0,10" CornerRadius="3">
+            <StackPanel>
+                <TextBlock x:Name="PartNameLabel" FontWeight="Bold" FontSize="14"
+                           Foreground="{StaticResource Brush.Foreground}"/>
+                <TextBlock x:Name="PartMetaLabel" FontSize="11" Margin="0,4,0,0"
+                           Foreground="#FFB0B0B0"/>
+                <TextBlock x:Name="CountLabel" FontSize="11" Margin="0,2,0,0"
+                           Foreground="#FF909090"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock DockPanel.Dock="Top" Text="Všetky operácie na dielci"
+                   FontWeight="SemiBold" Margin="0,0,0,6"
+                   Foreground="{StaticResource Brush.Foreground}"/>
+
+        <ListBox x:Name="OperationsList"
+                 Background="{StaticResource Brush.Panel}"
+                 BorderBrush="{StaticResource Brush.Border}"
+                 BorderThickness="1">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{StaticResource Brush.Foreground}"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Style.Resources>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FF094771"/>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFFFF"/>
+                    </Style.Resources>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="#FF1A2430"
+                            BorderBrush="{StaticResource Brush.Border}"
+                            BorderThickness="1"
+                            Padding="8,6" Margin="4,2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                           Foreground="{StaticResource Brush.Foreground}"/>
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Foreground="#FFB8C0C8">
+                                    <Run Text="{Binding TypeLabel, Mode=OneWay}"/>
+                                    <Run Text=" · plocha "/>
+                                    <Run Text="{Binding Face, Mode=OneWay}"/>
+                                    <Run Text=" · refpos "/>
+                                    <Run Text="{Binding RefPos, Mode=OneWay}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="10" Margin="0,2,0,0" Foreground="#FF8EC9B0">
+                                    <Run Text="Stav: "/>
+                                    <Run Text="{Binding EnabledText, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>
