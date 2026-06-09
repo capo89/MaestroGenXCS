@@ -27,6 +27,9 @@ public partial class Assembly3DPanel : UserControl
     public Assembly3DPanel()
     {
         InitializeComponent();
+        AssemblyViewportInput.Configure(Viewport);
+        Viewport.MouseLeftButtonDown += OnViewport_MouseLeftButtonDown;
+        Viewport.MouseLeftButtonUp += OnViewport_MouseLeftButtonUp;
         Loaded += (_, _) => Rebuild(resetCamera: true);
         Unloaded += (_, _) => DetachInternal();
     }
@@ -58,6 +61,7 @@ public partial class Assembly3DPanel : UserControl
             or nameof(AssemblyViewModel.SelectedZostava))
         {
             _panel?.RefreshInsertList();
+            _panel?.RefreshMoventoRows();
             Rebuild(resetCamera: false);
         }
     }
@@ -65,7 +69,11 @@ public partial class Assembly3DPanel : UserControl
     private void OnRefreshRequested(object? sender, EventArgs e)
     {
         _ = sender; _ = e;
-        Dispatcher.Invoke(() => Rebuild(resetCamera: false));
+        Dispatcher.Invoke(() =>
+        {
+            _panel?.RefreshMoventoRows();
+            Rebuild(resetCamera: false);
+        });
     }
 
     private void DetachInternal()
@@ -140,6 +148,9 @@ public partial class Assembly3DPanel : UserControl
     private void OnViewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _ = sender;
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+            return;
+
         var placement = GetDraggablePlacement();
         if (placement == null && _vm?.SelectedPlacement is { IsPlacedInScene: true, IsLocked: false } sel)
         {
@@ -155,6 +166,8 @@ public partial class Assembly3DPanel : UserControl
         _dragStartScreen = e.GetPosition(Viewport);
         _dragStartX = placement.OffsetY;
         _dragStartDepth = placement.OffsetDepthMm;
+        Viewport.MouseMove += OnViewport_MouseMove;
+        Viewport.MouseLeave += OnViewport_MouseLeave;
         Viewport.CaptureMouse();
         e.Handled = true;
     }
@@ -174,6 +187,9 @@ public partial class Assembly3DPanel : UserControl
     private void OnViewport_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _ = sender;
+        if (!_dragging)
+            return;
+
         EndDrag();
         e.Handled = true;
     }
@@ -191,6 +207,8 @@ public partial class Assembly3DPanel : UserControl
             return;
 
         _dragging = false;
+        Viewport.MouseMove -= OnViewport_MouseMove;
+        Viewport.MouseLeave -= OnViewport_MouseLeave;
         Viewport.ReleaseMouseCapture();
         Rebuild(resetCamera: false);
     }
@@ -231,5 +249,20 @@ public partial class Assembly3DPanel : UserControl
         editor.ShowDialog();
         _panel?.RefreshInsertList();
         Rebuild(resetCamera: false);
+    }
+}
+
+/// <summary>Gestá kamery v 3D skladaní – oddelené od ťahania dielcov.</summary>
+internal static class AssemblyViewportInput
+{
+    public static void Configure(HelixViewport3D viewport)
+    {
+        viewport.Focusable = true;
+        viewport.IsRotationEnabled = true;
+        viewport.IsPanEnabled = true;
+        viewport.IsZoomEnabled = true;
+        viewport.RotateGesture = new MouseGesture(MouseAction.RightClick, ModifierKeys.Shift);
+        viewport.PanGesture = new MouseGesture(MouseAction.RightClick);
+        viewport.PreviewMouseDown += (_, _) => viewport.Focus();
     }
 }

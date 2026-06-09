@@ -26,10 +26,12 @@ public sealed partial class AssemblyViewModel : ObservableObject
     private readonly AssemblyStore _assemblyStore = new();
     private readonly OperationPropagator _propagator;
     private readonly DispatcherTimer _policaRebuildTimer;
+    private readonly DispatcherTimer _moventoApplyTimer;
     private Part? _policaRebuildTarget;
     private AssemblyPlacement? _wiredPlacement;
     private readonly HashSet<Part> _setupRefreshWiredParts = new();
     private readonly HashSet<AssemblyPlacement> _setupRefreshWiredPlacements = new();
+    private SufelAssemblyResolver.Result? _lastSufelResolveResult;
 
     private static readonly HashSet<string> PolicaRebuildProperties = new(StringComparer.Ordinal)
     {
@@ -169,6 +171,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
         _policaRebuildTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _policaRebuildTimer.Tick += OnPolicaRebuildTimerTick;
+        _moventoApplyTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _moventoApplyTimer.Tick += OnMoventoApplyTimerTick;
         _store.Parts.CollectionChanged += OnStorePartsCollectionChanged;
     }
 
@@ -232,6 +236,30 @@ public sealed partial class AssemblyViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(zostava))
             return;
         SelectedZostava = zostava;
+    }
+
+    private void SelectZostavaAfterImport()
+    {
+        var zostava = _store.Parts
+            .Where(p => p.Kind is PartKind.BokL or PartKind.BokP)
+            .Select(p => p.Zostava)
+            .FirstOrDefault(z => !string.IsNullOrWhiteSpace(z));
+
+        zostava ??= _assemblyStore.Contexts.Values
+            .FirstOrDefault(c => c.ReferenceBok != null)
+            ?.Zostava;
+
+        zostava ??= _store.Parts.FirstOrDefault()?.Zostava;
+
+        if (!string.IsNullOrWhiteSpace(zostava))
+        {
+            _syncingZostavaFromPart = true;
+            SelectedZostava = zostava;
+            _syncingZostavaFromPart = false;
+        }
+
+        SelectedPart = FindDefaultPartForZostava(SelectedZostava)
+            ?? _store.Parts.FirstOrDefault();
     }
 
     private Part? FindDefaultPartForZostava(string? zostava)
@@ -305,9 +333,30 @@ public sealed partial class AssemblyViewModel : ObservableObject
         StatusText = $"Výška „{placement.Part.Name}“: {v:0} mm";
     }
 
+    private string BuildImportStatusText(int importedCount)
+    {
+        if (importedCount <= 0)
+            return "Import: nenašli sa žiadne dielce.";
+
+        var text = $"Importovaných položiek: {importedCount}";
+        if (_lastSufelResolveResult is { SkupinyCount: > 0 } sufel)
+        {
+            text += $", šuflí: {sufel.SkupinyCount}";
+            if (sufel.Warnings.Count > 0)
+                text += $" ({sufel.Warnings.Count} upozornení)";
+        }
+
+        return text;
+    }
+
     private void AfterPartsReplaced()
     {
+        SufelZostavaInferrer.Infer(_store.Parts.ToList());
+        CabinetBokClassifier.Apply(_store.Parts);
         _assemblyStore.SyncFromParts(_store.Parts);
+        _lastSufelResolveResult = SufelAssemblyResolver.Resolve(_store, _assemblyStore);
+        MoventoSekcieSynchronizer.SyncAll(_assemblyStore);
+        _store.RegenerateConnections();
         foreach (var p in _store.Parts)
             WirePolicaPart(p);
         RebuildPartsTree();
@@ -317,6 +366,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedPlacement));
         OnPropertyChanged(nameof(ReferenceBokText));
         OnPropertyChanged(nameof(HasSelectedZostava));
+        NotifySceneRefresh();
     }
 
     private void EnsureSelectedZostavaStillValid()
@@ -349,14 +399,37 @@ public sealed partial class AssemblyViewModel : ObservableObject
                      .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
         {
             var node = new ZostavaTreeNode(group.Key);
-            foreach (var part in group.OrderBy(p => p.Poradie).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+            var ctx = _assemblyStore.GetContext(group.Key);
+            var sufelPartIds = new HashSet<Guid>();
+            var sufelNodes = new List<SufelTreeNode>();
+
+            if (ctx != null)
+            {
+                foreach (var sk in ctx.SufelSkupiny
+                             .OrderBy(s => s.Pozicia.SortOrder())
+                             .ThenBy(s => s.PoradieOdSpodu))
+                {
+                    sufelPartIds.UnionWith(sk.EnumeratePartIds());
+                    var sufelNode = new SufelTreeNode(sk);
+                    sufelNode.Refresh(_assemblyStore);
+                    sufelNodes.Add(sufelNode);
+                }
+            }
+
+            foreach (var part in group
+                         .Where(p => !sufelPartIds.Contains(p.Id))
+                         .OrderBy(p => p.Poradie)
+                         .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
             {
                 var entry = new PartTreeEntry(part);
                 entry.Refresh(_assemblyStore);
-                node.PartEntries.Add(entry);
+                node.Children.Add(entry);
             }
 
-            node.RefreshFromEntries();
+            foreach (var sufelNode in sufelNodes)
+                node.Children.Add(sufelNode);
+
+            node.RefreshChildren(_assemblyStore);
             PartsTree.Add(node);
         }
     }
@@ -364,11 +437,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
     private void RefreshTreeSetupStatus()
     {
         foreach (var node in PartsTree)
-        {
-            foreach (var entry in node.PartEntries)
-                entry.Refresh(_assemblyStore);
-            node.RefreshFromEntries();
-        }
+            node.RefreshChildren(_assemblyStore);
     }
 
     private void WireAllSetupRefreshHooks()
@@ -418,11 +487,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
             var list = _importer.Import(dlg.FileName);
             _store.ReplaceParts(list);
             AfterPartsReplaced();
-            SelectedPart = _store.Parts.FirstOrDefault();
-            SelectedZostava = SelectedPart?.Zostava;
-            StatusText = list.Count > 0
-                ? $"Importovaných položiek: {list.Count}"
-                : "Import: nenašli sa žiadne dielce.";
+            SelectZostavaAfterImport();
+            StatusText = BuildImportStatusText(list.Count);
             if (list.Count == 0)
             {
                 WpfMsg.Show(
@@ -798,39 +864,34 @@ public sealed partial class AssemblyViewModel : ObservableObject
             SchedulePolicaRebuild(part);
     }
 
-    [RelayCommand]
-    private void OpenMovento()
+    public void ScheduleMoventoApply()
+    {
+        _moventoApplyTimer.Stop();
+        _moventoApplyTimer.Start();
+    }
+
+    public void ApplyMoventoForActiveZostava()
     {
         var zostava = ActiveZostava;
         if (string.IsNullOrWhiteSpace(zostava))
-        {
-            StatusText = "V strome označ zostavu alebo dielec.";
-            WpfMsg.Show(
-                "V strome označ zostavu alebo dielec, pre ktorú chceš nastaviť šufle Movento.",
-                "Movento",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
-
-        var dlg = new Views.MoventoSettingsDialog(this, zostava)
-        {
-            Owner = Application.Current.MainWindow,
-        };
-        if (dlg.ShowDialog() != true)
             return;
 
         var ctx = GetAssemblyContext(zostava);
-        if (ctx == null)
-        {
-            StatusText = "Zostava nemá kontext skladania.";
+        if (ctx == null || ctx.MoventoSekcie.Count == 0)
             return;
-        }
+
+        if (!ctx.MoventoSekcie.Any(s => s.VyskaMm > 0))
+            return;
 
         MoventoKolikyApplier.Apply(_store, ctx, zostava);
-        StatusText = $"Movento – zostava „{zostava}“: {ctx.MoventoSekcie.Count} šuflí aplikovaných na boky.";
         RefreshTreeSetupStatus();
         NotifySceneRefresh();
+    }
+
+    private void OnMoventoApplyTimerTick(object? sender, EventArgs e)
+    {
+        _moventoApplyTimer.Stop();
+        ApplyMoventoForActiveZostava();
     }
 
     [RelayCommand]
@@ -853,7 +914,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         try
         {
             AssemblySolverApplier.Apply(_store, ctx, _propagator);
-            MoventoKolikyApplier.Apply(_store, ctx, zostava);
+            ApplyMoventoForActiveZostava();
             StatusText = $"Zostava „{zostava}“: prepocítané ({ctx.Placements.Count} umiestnení).";
             RefreshTreeSetupStatus();
             NotifySceneRefresh();
@@ -993,11 +1054,33 @@ public sealed partial class ZostavaTreeNode : ObservableObject
     public string Zostava { get; }
     public string DisplayName { get; }
     public bool IsExpanded { get; set; } = true;
-    public ObservableCollection<PartTreeEntry> PartEntries { get; } = new();
+
+    /// <summary>Dielce zostavy a uzly šuflí (<see cref="SufelTreeNode"/>).</summary>
+    public ObservableCollection<object> Children { get; } = new();
 
     [ObservableProperty]
     private bool _isConfigured;
 
-    public void RefreshFromEntries() =>
-        IsConfigured = PartEntries.Count > 0 && PartEntries.All(e => e.IsConfigured);
+    public void RefreshChildren(AssemblyStore store)
+    {
+        foreach (var child in Children)
+        {
+            switch (child)
+            {
+                case PartTreeEntry entry:
+                    entry.Refresh(store);
+                    break;
+                case SufelTreeNode sufel:
+                    sufel.Refresh(store);
+                    break;
+            }
+        }
+
+        IsConfigured = Children.Count > 0 && Children.All(child => child switch
+        {
+            PartTreeEntry entry => entry.IsConfigured,
+            SufelTreeNode sufel => sufel.IsConfigured,
+            _ => false,
+        });
+    }
 }

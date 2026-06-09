@@ -18,5 +18,6 @@ public enum PartKind
     SufelBok,
     SufelCelo,
     SufelZad,
+    SufelDno,
     Kovanie
 }

@@ -11,7 +11,7 @@ public sealed partial class PartTreeEntry : ObservableObject
 
     public Part Part { get; }
 
-    public string Name => Part.Name;
+    public string Name => Part.ZobrazenieVZozname;
 
     [ObservableProperty]
     private bool _isConfigured;

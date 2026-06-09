@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Operations;
 using MaestroGenXcs.Services;
+using MaestroGenXcs.Sufle;
 using MaestroGenXcs.Xcs;
 
 // Automatické testy: XCS vzor, assembly solver, store, export.
@@ -240,7 +241,128 @@ Console.WriteLine(new string('=', 50));
     }
 }
 
-// --- 5. VzoryXcs súbor na disku ---
+// --- 5. Šufle – parser a rozdelenie dna ---
+{
+    var pVrchny = SufelNameParser.Parse("sufel bok vrchny");
+    if (pVrchny.JeSufel && pVrchny.Rola == SufelNameParser.SufelRola.Bok && pVrchny.Pozicia == SufelPozicia.Vrchny)
+        Pass("Sufel parser – bok vrchny");
+    else
+        Fail("Sufel parser – bok vrchny", $"{pVrchny}");
+
+    var pDno = SufelNameParser.Parse("sufel dno");
+    if (pDno.JeSufel && pDno.Rola == SufelNameParser.SufelRola.Dno && pDno.Pozicia == SufelPozicia.Nezadana)
+        Pass("Sufel parser – dno bez pozície");
+    else
+        Fail("Sufel parser – dno bez pozície", $"{pDno}");
+
+    var store = new PartsStore();
+    var asm = new AssemblyStore();
+    const string z = "7";
+    void Add(string name, int ks) =>
+        store.Parts.Add(new Part(name, 400, 300, 18) { Zostava = z, PocetKs = ks });
+
+    Add("sufel bok vrchny", 2);
+    Add("sufel celo vrchny", 1);
+    Add("sufel zad vrchny", 1);
+    Add("sufel bok stredny", 2);
+    Add("sufel celo stredny", 1);
+    Add("sufel zad stredny", 1);
+    Add("sufel bok spodny", 2);
+    Add("sufel celo spodny", 1);
+    Add("sufel zad spodny", 1);
+    Add("sufel dno", 3);
+
+    asm.SyncFromParts(store.Parts);
+    var result = SufelAssemblyResolver.Resolve(store, asm);
+    var ctx = asm.GetContext(z)!;
+
+    if (result.SkupinyCount == 3 && ctx.SufelSkupiny.Count == 3)
+        Pass("Sufel resolver – 3 šufle");
+    else
+        Fail("Sufel resolver – 3 šufle", $"skupiny={result.SkupinyCount}");
+
+    if (ctx.SufelSkupiny.All(s => s.JeKompletna))
+        Pass("Sufel resolver – kompletné šufle");
+    else
+        Fail("Sufel resolver – kompletné šufle", string.Join("; ", ctx.SufelSkupiny.Select(s => s.Nazov)));
+
+    var dna = store.Parts.Where(p => p.Kind == PartKind.SufelDno).ToList();
+    if (dna.Count == 3 && dna.All(p => p.PocetKs == 1 && p.SufelPozicia != null))
+        Pass("Sufel resolver – rozdelené dno (3×1 ks)");
+    else
+        Fail("Sufel resolver – rozdelené dno", $"dna={dna.Count}, ks=[{string.Join(",", dna.Select(p => p.PocetKs))}]");
+}
+
+// --- 6. Boky skrinky z kusovníka (bok (1), bok 2) ---
+{
+    var parts = new List<Part>
+    {
+        new("bok (1)", 2000, 320, 18) { Zostava = "1", Poradie = 3 },
+        new("bok 2", 2000, 320, 18) { Zostava = "1", Poradie = 5 },
+        new("bok sufel 1", 400, 300, 18) { Zostava = "1", PocetKs = 8 },
+    };
+    CabinetBokClassifier.Apply(parts);
+    var bokL = parts.FirstOrDefault(p => p.Kind == PartKind.BokL);
+    var bokP = parts.FirstOrDefault(p => p.Kind == PartKind.BokP);
+    var sufelBok = parts.First(p => p.Name.StartsWith("bok sufel"));
+    if (bokL?.Name == "bok (1)" && bokP?.Name == "bok 2" && sufelBok.Kind == PartKind.Generic)
+        Pass("CabinetBok – bok (1)/bok 2 vs bok sufel");
+    else
+        Fail("CabinetBok – bok (1)/bok 2", $"L={bokL?.Name}/{bokL?.Kind}, P={bokP?.Name}/{bokP?.Kind}, sufel={sufelBok.Kind}");
+
+    var store = new PartsStore();
+    foreach (var p in parts)
+        store.Parts.Add(p);
+    var asm = new AssemblyStore();
+    asm.SyncFromParts(store.Parts);
+    if (asm.GetContext("1")?.ReferenceBok?.Name == "bok (1)")
+        Pass("CabinetBok – ReferenceBok v 3D kontexte");
+    else
+        Fail("CabinetBok – ReferenceBok", asm.GetContext("1")?.ReferenceBok?.Name ?? "null");
+}
+
+// --- 7. Krycí bok nie je referencia ---
+{
+    var parts = new List<Part>
+    {
+        new("bok 1,2 kryci", 2130, 560, 18) { Zostava = "1", Poradie = 4, Kind = PartKind.BokL },
+        new("bok 1", 2130, 560, 18) { Zostava = "1", Poradie = 3 },
+        new("bok 2", 2130, 560, 18) { Zostava = "1", Poradie = 5 },
+    };
+    CabinetBokClassifier.Apply(parts);
+    var store = new PartsStore();
+    foreach (var p in parts)
+        store.Parts.Add(p);
+    var asm = new AssemblyStore();
+    asm.SyncFromParts(store.Parts);
+    var refName = asm.GetContext("1")?.ReferenceBok?.Name;
+    if (refName == "bok 1" && parts.First(p => p.Name.StartsWith("bok 1,2")).Kind == PartKind.Generic)
+        Pass("CabinetBok – krycí bok nie je referencia");
+    else
+        Fail("CabinetBok – krycí bok", $"ref={refName}, kryciKind={parts[0].Kind}");
+}
+
+// --- 8. Pomocný bok nie je referencia ---
+{
+    var parts = new List<Part>
+    {
+        new("pomocna bok 3 cista miera", 2130, 560, 18) { Zostava = "3", Poradie = 2, Kind = PartKind.BokL },
+        new("bok 3", 2130, 560, 18) { Zostava = "3", Poradie = 3 },
+    };
+    CabinetBokClassifier.Apply(parts);
+    var store = new PartsStore();
+    foreach (var p in parts)
+        store.Parts.Add(p);
+    var asm = new AssemblyStore();
+    asm.SyncFromParts(store.Parts);
+    var refName = asm.GetContext("3")?.ReferenceBok?.Name;
+    if (refName == "bok 3" && parts[0].Kind == PartKind.Generic)
+        Pass("CabinetBok – pomocný bok nie je referencia");
+    else
+        Fail("CabinetBok – pomocný bok", $"ref={refName}, pomocnaKind={parts[0].Kind}");
+}
+
+// --- 9. VzoryXcs súbor na disku ---
 {
     var repoRoot = FindRepoRoot();
     var vzorPath = Path.Combine(repoRoot, "VzoryXcs", "Polica-pevna.txt");

@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using MaestroGenXcs.Domain;
+using MaestroGenXcs.Sufle;
 
 namespace MaestroGenXcs.Services;
 
@@ -19,10 +20,7 @@ public sealed class PartTypeHinter
             return PartKind.Generic;
 
         var name = rawName.ToLowerInvariant();
-        var isSufel = name.Contains("sufel", StringComparison.Ordinal)
-                   || name.Contains("šufel", StringComparison.Ordinal);
-
-        if (isSufel)
+        if (Sufle.SufelNameParser.Parse(rawName).JeSufel)
         {
             if (name.Contains("bok", StringComparison.Ordinal))
                 return PartKind.SufelBok;
@@ -30,6 +28,8 @@ public sealed class PartTypeHinter
                 return PartKind.SufelCelo;
             if (name.Contains("zad", StringComparison.Ordinal))
                 return PartKind.SufelZad;
+            if (Regex.IsMatch(name, @"\bdno\b"))
+                return PartKind.SufelDno;
             return PartKind.Kovanie;
         }
 
@@ -54,6 +54,10 @@ public sealed class PartTypeHinter
             if (name.Contains("_l", StringComparison.Ordinal) || Regex.IsMatch(name, @"\bľav"))
                 return PartKind.BokL;
             if (name.Contains("_p", StringComparison.Ordinal) || Regex.IsMatch(name, @"\bprav"))
+                return PartKind.BokP;
+            if (Regex.IsMatch(name, @"\bbok\s*[lľ]\b", RegexOptions.IgnoreCase))
+                return PartKind.BokL;
+            if (Regex.IsMatch(name, @"\bbok\s*p\b", RegexOptions.IgnoreCase))
                 return PartKind.BokP;
             var side = SidePattern.Match(rawName);
             if (side.Success)

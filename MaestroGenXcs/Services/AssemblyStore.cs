@@ -1,5 +1,6 @@
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Rendering;
+using MaestroGenXcs.Sufle;
 
 namespace MaestroGenXcs.Services;
 
@@ -50,8 +51,7 @@ public sealed class AssemblyStore
                 _byZostava[grp.Key] = ctx;
             }
 
-            ctx.ReferenceBok = members.FirstOrDefault(p => p.Kind == PartKind.BokL)
-                ?? members.FirstOrDefault(p => p.Kind == PartKind.BokP);
+            ctx.ReferenceBok = ResolveReferenceBok(members);
 
             var existing = new Dictionary<Part, AssemblyPlacement>();
             foreach (var p in ctx.Placements)
@@ -64,6 +64,9 @@ public sealed class AssemblyStore
                     continue;
 
                 if (part.Kind == PartKind.Generic)
+                    continue;
+
+                if (SufelNameParser.IsSufelKind(part.Kind))
                     continue;
 
                 if (existing.TryGetValue(part, out var prev))
@@ -95,6 +98,45 @@ public sealed class AssemblyStore
 
         foreach (var key in _byZostava.Keys.Where(k => !seen.Contains(k)).ToList())
             _byZostava.Remove(key);
+    }
+
+    private static Part? ResolveReferenceBok(IReadOnlyList<Part> members)
+    {
+        var bokL = members.FirstOrDefault(p => p.Kind == PartKind.BokL && !CabinetBokClassifier.IsNonStructuralBok(p));
+        if (bokL != null)
+            return bokL;
+
+        var bokP = members.FirstOrDefault(p => p.Kind == PartKind.BokP && !CabinetBokClassifier.IsNonStructuralBok(p));
+        if (bokP != null)
+            return bokP;
+
+        var hinter = new PartTypeHinter();
+        Part? fallbackP = null;
+        foreach (var part in members)
+        {
+            if (CabinetBokClassifier.IsNonStructuralBok(part))
+                continue;
+
+            if (SufelNameParser.IsSufelKind(part.Kind) || SufelNameParser.Parse(part.Name).JeSufel)
+                continue;
+
+            var kind = part.Kind is PartKind.BokL or PartKind.BokP
+                ? part.Kind
+                : hinter.Hint(part.Name);
+            if (kind == PartKind.BokL)
+            {
+                part.Kind = PartKind.BokL;
+                return part;
+            }
+
+            if (kind == PartKind.BokP && fallbackP == null)
+            {
+                part.Kind = PartKind.BokP;
+                fallbackP = part;
+            }
+        }
+
+        return fallbackP;
     }
 
     private static double DefaultOffsetDepth(Part part) =>

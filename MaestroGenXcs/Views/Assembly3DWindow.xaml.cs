@@ -26,6 +26,9 @@ public partial class Assembly3DWindow : Window
     public Assembly3DWindow()
     {
         InitializeComponent();
+        AssemblyViewportInput.Configure(Viewport);
+        Viewport.MouseLeftButtonDown += OnViewport_MouseLeftButtonDown;
+        Viewport.MouseLeftButtonUp += OnViewport_MouseLeftButtonUp;
         Loaded += (_, _) => Rebuild(resetCamera: true);
     }
 
@@ -144,6 +147,9 @@ public partial class Assembly3DWindow : Window
     private void OnViewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _ = sender;
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+            return;
+
         var placement = GetDraggablePlacement();
         if (placement == null && _vm?.SelectedPlacement is { IsPlacedInScene: true, IsLocked: false } sel)
         {
@@ -159,6 +165,8 @@ public partial class Assembly3DWindow : Window
         _dragStartScreen = e.GetPosition(Viewport);
         _dragStartX = placement.OffsetY;
         _dragStartDepth = placement.OffsetDepthMm;
+        Viewport.MouseMove += OnViewport_MouseMove;
+        Viewport.MouseLeave += OnViewport_MouseLeave;
         Viewport.CaptureMouse();
         e.Handled = true;
     }
@@ -178,6 +186,9 @@ public partial class Assembly3DWindow : Window
     private void OnViewport_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _ = sender;
+        if (!_dragging)
+            return;
+
         EndDrag();
         e.Handled = true;
     }
@@ -195,6 +206,8 @@ public partial class Assembly3DWindow : Window
             return;
 
         _dragging = false;
+        Viewport.MouseMove -= OnViewport_MouseMove;
+        Viewport.MouseLeave -= OnViewport_MouseLeave;
         Viewport.ReleaseMouseCapture();
         Rebuild(resetCamera: false);
     }

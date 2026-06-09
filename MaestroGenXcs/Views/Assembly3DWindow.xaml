@@ -18,21 +18,25 @@
                                ShowFrameRate="False"
                                ShowCoordinateSystem="True"
                                ShowViewCube="True"
-                               Background="#FF111114"
-                               MouseLeftButtonDown="OnViewport_MouseLeftButtonDown"
-                               MouseMove="OnViewport_MouseMove"
-                               MouseLeftButtonUp="OnViewport_MouseLeftButtonUp"
-                               MouseLeave="OnViewport_MouseLeave">
+                               Focusable="True"
+                               Background="#FF111114">
+                <h:HelixViewport3D.RotateGesture>
+                    <MouseGesture MouseAction="RightClick" Modifiers="Shift"/>
+                </h:HelixViewport3D.RotateGesture>
+                <h:HelixViewport3D.PanGesture>
+                    <MouseGesture MouseAction="RightClick"/>
+                </h:HelixViewport3D.PanGesture>
                 <h:DefaultLights/>
             </h:HelixViewport3D>
 
-            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Opacity="0.92">
+            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Opacity="0.92"
+                        IsHitTestVisible="False">
                 <TextBlock x:Name="TitleLabel" FontSize="16" FontWeight="Bold" Foreground="White"
                            Text="Zostava"/>
                 <TextBlock x:Name="DetailLabel" Foreground="LightGray" TextWrapping="Wrap"/>
                 <TextBlock x:Name="SelectedPartLabel" Foreground="#FF4EC9B0" Margin="0,6,0,0" TextWrapping="Wrap"/>
                 <TextBlock Foreground="#FFAAAAAA" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
-                           Text="Bok L je pevný (referencia). Dno/vrch: ⚙ kolíky → Vložiť → potiahni v 3D (alebo Upraviť a znova ťahaj)."/>
+                           Text="Otáčanie: Shift + pravé. Posun pohľadu: pravé. Zoom: koliesko. Diel: Shift + ľavé (po Vložiť)."/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10">

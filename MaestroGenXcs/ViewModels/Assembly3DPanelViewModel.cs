@@ -20,6 +20,10 @@ public sealed partial class Assembly3DPanelViewModel : ObservableObject
 
     public ObservableCollection<AssemblyInsertItemViewModel> InsertItems { get; } = new();
 
+    public ObservableCollection<SufelMoventoRowViewModel> MoventoRows { get; } = new();
+
+    public bool HasMoventoRows => MoventoRows.Count > 0;
+
     public Assembly3DPanelViewModel(
         AssemblyViewModel parent,
         Action<AssemblyPlacement>? openPinSettings = null)
@@ -27,6 +31,23 @@ public sealed partial class Assembly3DPanelViewModel : ObservableObject
         _parent = parent;
         _openPinSettings = openPinSettings;
         RefreshInsertList();
+        RefreshMoventoRows();
+    }
+
+    public void RefreshMoventoRows()
+    {
+        MoventoRows.Clear();
+        var ctx = _parent.GetAssemblyContext(_parent.ActiveZostavaForBinding);
+        if (ctx == null)
+        {
+            OnPropertyChanged(nameof(HasMoventoRows));
+            return;
+        }
+
+        foreach (var sekcia in ctx.MoventoSekcie)
+            MoventoRows.Add(new SufelMoventoRowViewModel(sekcia, _parent));
+
+        OnPropertyChanged(nameof(HasMoventoRows));
     }
 
     public void RefreshInsertList()

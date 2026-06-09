@@ -22,4 +22,7 @@ public sealed partial class AssemblyContext : ObservableObject
 
     /// <summary>Sekcie šuflí Blum Movento v tejto zostave.</summary>
     public ObservableCollection<SufelMoventoSekcia> MoventoSekcie { get; } = new();
+
+    /// <summary>Zoskupené šufle po importe (2× bok, čelo, zad, dno).</summary>
+    public ObservableCollection<SufelSkupina> SufelSkupiny { get; } = new();
 }

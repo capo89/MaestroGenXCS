@@ -88,6 +88,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.NewValue is SufelTreeNode sufelNode)
+        {
+            _treeZostavaNodeHighlight = null;
+            Vm.SelectedPart = sufelNode.PartEntries.FirstOrDefault()?.Part;
+            return;
+        }
+
         if (e.NewValue is PartTreeEntry entry)
         {
             _treeZostavaNodeHighlight = null;
@@ -121,22 +128,46 @@ public partial class MainWindow : Window
             if (item is not ZostavaTreeNode node)
                 continue;
 
-            var entry = node.PartEntries.FirstOrDefault(e => ReferenceEquals(e.Part, part));
-            if (entry == null)
+            if (tree.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem nodeItem)
                 continue;
 
-            if (tree.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem nodeItem)
-                return;
-
-            nodeItem.IsExpanded = true;
-            nodeItem.UpdateLayout();
-            if (nodeItem.ItemContainerGenerator.ContainerFromItem(entry) is TreeViewItem leaf)
+            foreach (var child in node.Children)
             {
-                leaf.IsSelected = true;
-                leaf.BringIntoView();
-            }
+                if (child is PartTreeEntry entry && ReferenceEquals(entry.Part, part))
+                {
+                    nodeItem.IsExpanded = true;
+                    nodeItem.UpdateLayout();
+                    if (nodeItem.ItemContainerGenerator.ContainerFromItem(entry) is TreeViewItem leaf)
+                    {
+                        leaf.IsSelected = true;
+                        leaf.BringIntoView();
+                    }
 
-            return;
+                    return;
+                }
+
+                if (child is not SufelTreeNode sufelNode)
+                    continue;
+
+                var inSufel = sufelNode.PartEntries.FirstOrDefault(e => ReferenceEquals(e.Part, part));
+                if (inSufel == null)
+                    continue;
+
+                nodeItem.IsExpanded = true;
+                nodeItem.UpdateLayout();
+                if (nodeItem.ItemContainerGenerator.ContainerFromItem(sufelNode) is not TreeViewItem sufelItem)
+                    return;
+
+                sufelItem.IsExpanded = true;
+                sufelItem.UpdateLayout();
+                if (sufelItem.ItemContainerGenerator.ContainerFromItem(inSufel) is TreeViewItem sufelLeaf)
+                {
+                    sufelLeaf.IsSelected = true;
+                    sufelLeaf.BringIntoView();
+                }
+
+                return;
+            }
         }
     }
 

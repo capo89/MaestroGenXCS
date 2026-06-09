@@ -39,12 +39,6 @@
 
                             ToolTip="Pridať alebo aktualizovať obeh podľa ABS"/>
 
-                    <Button Style="{StaticResource ToolbarButton}" Content="Movento"
-
-                            Command="{Binding OpenMoventoCommand}"
-
-                            ToolTip="Nastavenie šuflí Blum Movento pre označenú zostavu"/>
-
                     <Button Style="{StaticResource ToolbarButton}" Content="Export XCS"
 
                             Command="{Binding ExportXcsCommand}"
@@ -104,9 +98,18 @@
                         </TreeView.ItemContainerStyle>
                         <TreeView.Resources>
                             <HierarchicalDataTemplate DataType="{x:Type vm:ZostavaTreeNode}"
-                                                      ItemsSource="{Binding PartEntries}">
+                                                      ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,2"
                                             ToolTip="Kliknutím aktivuješ celú zostavu. Zelená fajka = všetky dielce nastavené a vložené.">
+                                    <ContentControl Content="{Binding}"
+                                                    ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                            <HierarchicalDataTemplate DataType="{x:Type vm:SufelTreeNode}"
+                                                      ItemsSource="{Binding PartEntries}">
+                                <StackPanel Orientation="Horizontal" Margin="0,1,0,1"
+                                            ToolTip="Šufľa – 2× bok, 1× čelo, 1× zad, 1× dno (bok sa nedeľí na L/P).">
                                     <ContentControl Content="{Binding}"
                                                     ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>

@@ -31,6 +31,14 @@ public sealed partial class Part : ObservableObject
     [ObservableProperty]
     private PartKind _kind = PartKind.Generic;
 
+    /// <summary>Pozícia šufle v skrinke (z názvu: spodný / stredný / vrchný).</summary>
+    [ObservableProperty]
+    private SufelPozicia? _sufelPozicia;
+
+    /// <summary>Väzba na <see cref="Sufle.SufelSkupina"/> v kontexte zostavy.</summary>
+    [ObservableProperty]
+    private Guid? _sufelSkupinaId;
+
     [ObservableProperty]
     private double _dx;
 

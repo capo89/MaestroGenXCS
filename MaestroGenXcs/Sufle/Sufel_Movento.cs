@@ -57,6 +57,10 @@ public static class Sufel_Movento
 /// </summary>
 public sealed partial class SufelMoventoSekcia : ObservableObject
 {
+    /// <summary>Väzba na <see cref="SufelSkupina"/> z importu (jedna sekcia = jedna šufľa).</summary>
+    [ObservableProperty]
+    private Guid? _sufelSkupinaId;
+
     [ObservableProperty]
     private string _nazov = "Šufľa 1";
 
