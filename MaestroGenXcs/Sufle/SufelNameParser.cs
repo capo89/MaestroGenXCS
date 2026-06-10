@@ -18,7 +18,8 @@ public static class SufelNameParser
     public readonly record struct Parsed(
         bool JeSufel,
         SufelRola Rola,
-        SufelPozicia Pozicia);
+        SufelPozicia Pozicia,
+        int? Cislo);
 
     private static readonly Regex SufelTokenPattern = new(
         @"(?:sufel|šufel|sufl[ae]|šufl[ae])",
@@ -27,15 +28,16 @@ public static class SufelNameParser
     public static Parsed Parse(string? rawName)
     {
         if (string.IsNullOrWhiteSpace(rawName))
-            return new Parsed(false, SufelRola.Neznama, SufelPozicia.Nezadana);
+            return new Parsed(false, SufelRola.Neznama, SufelPozicia.Nezadana, null);
 
         var normalized = Normalize(rawName);
         if (!SufelTokenPattern.IsMatch(normalized))
-            return new Parsed(false, SufelRola.Neznama, SufelPozicia.Nezadana);
+            return new Parsed(false, SufelRola.Neznama, SufelPozicia.Nezadana, null);
 
         var rola = ResolveRola(normalized);
         var pozicia = ResolvePozicia(normalized);
-        return new Parsed(true, rola, pozicia);
+        var cislo = ResolveCislo(normalized);
+        return new Parsed(true, rola, pozicia, cislo);
     }
 
     public static PartKind ToPartKind(SufelRola rola) => rola switch
@@ -105,5 +107,19 @@ public static class SufelNameParser
         if (Regex.IsMatch(normalized, @"\b(spodny|spodna|dolny|dolna)\b"))
             return SufelPozicia.Spodny;
         return SufelPozicia.Nezadana;
+    }
+
+    /// <summary>Číslo šufle v názve, napr. „bok šufel 1“, „čelo šufel 2“.</summary>
+    private static int? ResolveCislo(string normalized)
+    {
+        var m = Regex.Match(normalized, @"(?:sufel|sufl\w*)\s+(\d+)\b");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out var poSufel) && poSufel > 0)
+            return poSufel;
+
+        m = Regex.Match(normalized, @"\b(\d+)\s+(?:sufel|sufl\w*)\b");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out var predSufel) && predSufel > 0)
+            return predSufel;
+
+        return null;
     }
 }

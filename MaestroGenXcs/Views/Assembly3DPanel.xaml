@@ -53,7 +53,7 @@
                             <ColumnDefinition Width="72"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Šufľa" FontSize="11" Foreground="#FFCCCCCC" FontWeight="SemiBold"/>
+                        <TextBlock Text="Šufel" FontSize="11" Foreground="#FFCCCCCC" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="1" Text="Výška" FontSize="11" Foreground="#FFCCCCCC" FontWeight="SemiBold"/>
                         <TextBlock Grid.Column="2" Text="Od predu" FontSize="11" Foreground="#FFCCCCCC" FontWeight="SemiBold"/>
                     </Grid>

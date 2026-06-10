@@ -55,40 +55,41 @@ public static class SufelAssemblyResolver
 
         if (pozicie.Count == 0)
         {
-            var inferred = InferDrawerCount(sufelParts, warnings, zostava);
-            if (inferred <= 0)
+            var drawerCount = InferDrawerCount(sufelParts, warnings, zostava);
+            if (drawerCount <= 0)
                 return 0;
 
-            for (var i = 0; i < inferred; i++)
+            var byCislo = BuildNumberBuckets(sufelParts);
+            var cisla = byCislo.Keys.Where(c => c > 0).OrderBy(c => c).ToList();
+            var useNumbered = cisla.Count == drawerCount
+                              && cisla.All(c => IsCompleteDrawerBucket(byCislo[c]));
+
+            if (useNumbered)
             {
-                var sk = new SufelSkupina
-                {
-                    Pozicia = SufelPozicia.Nezadana,
-                    PoradieOdSpodu = i + 1,
-                };
-                ctx.SufelSkupiny.Add(sk);
+                foreach (var cislo in cisla)
+                    AddSkupinaFromBucket(ctx, byCislo[cislo], SufelPozicia.Nezadana, cislo, zostava, warnings);
             }
-
-            warnings.Add($"Zostava „{zostava}“: šufle bez pozície v názve – odhadnutých {inferred} ks.");
-            return ctx.SufelSkupiny.Count;
-        }
-
-        foreach (var poz in pozicie)
-        {
-            var bucket = byPozicia[poz];
-            var sk = new SufelSkupina
+            else
             {
-                Pozicia = poz,
-                PoradieOdSpodu = poz.SortOrder() + 1,
-            };
+                for (var i = 0; i < drawerCount; i++)
+                {
+                    ctx.SufelSkupiny.Add(new SufelSkupina
+                    {
+                        Pozicia = SufelPozicia.Nezadana,
+                        PoradieOdSpodu = i + 1,
+                    });
+                }
 
-            sk.BokPart = PickPrimary(bucket.Boky);
-            sk.CeloPart = PickPrimary(bucket.Cela);
-            sk.ZadPart = PickPrimary(bucket.Zady);
-            sk.DnoPart = PickPrimary(bucket.Dna);
-
-            ValidateRoleKs(zostava, sk, warnings);
-            ctx.SufelSkupiny.Add(sk);
+                DistributeAggregated(store, ctx.SufelSkupiny, sufelParts, warnings);
+            }
+        }
+        else
+        {
+            foreach (var poz in pozicie)
+            {
+                var bucket = byPozicia[poz];
+                AddSkupinaFromBucket(ctx, bucket, poz, poz.SortOrder() + 1, zostava, warnings);
+            }
         }
 
         var bezDna = ctx.SufelSkupiny.Where(s => s.DnoPart == null).ToList();
@@ -143,6 +144,65 @@ public static class SufelAssemblyResolver
         public List<Part> Dna { get; } = new();
     }
 
+    private static void AddSkupinaFromBucket(
+        AssemblyContext ctx,
+        RoleBucket bucket,
+        SufelPozicia pozicia,
+        int poradieOdSpodu,
+        string zostava,
+        List<string> warnings)
+    {
+        var sk = new SufelSkupina
+        {
+            Pozicia = pozicia,
+            PoradieOdSpodu = poradieOdSpodu,
+        };
+
+        sk.BokPart = PickPrimary(bucket.Boky);
+        sk.CeloPart = PickPrimary(bucket.Cela);
+        sk.ZadPart = PickPrimary(bucket.Zady);
+        sk.DnoPart = PickPrimary(bucket.Dna);
+
+        ValidateRoleKs(zostava, sk, warnings);
+        ctx.SufelSkupiny.Add(sk);
+    }
+
+    private static Dictionary<int, RoleBucket> BuildNumberBuckets(IEnumerable<Part> sufelParts)
+    {
+        var map = new Dictionary<int, RoleBucket>();
+
+        foreach (var part in sufelParts)
+        {
+            var cislo = SufelNameParser.Parse(part.Name).Cislo;
+            if (cislo is not > 0)
+                continue;
+
+            if (!map.TryGetValue(cislo.Value, out var bucket))
+            {
+                bucket = new RoleBucket();
+                map[cislo.Value] = bucket;
+            }
+
+            switch (part.Kind)
+            {
+                case PartKind.SufelBok:
+                    bucket.Boky.Add(part);
+                    break;
+                case PartKind.SufelCelo:
+                    bucket.Cela.Add(part);
+                    break;
+                case PartKind.SufelZad:
+                    bucket.Zady.Add(part);
+                    break;
+                case PartKind.SufelDno:
+                    bucket.Dna.Add(part);
+                    break;
+            }
+        }
+
+        return map;
+    }
+
     private static Dictionary<SufelPozicia, RoleBucket> BuildPositionBuckets(IEnumerable<Part> sufelParts)
     {
         var map = new Dictionary<SufelPozicia, RoleBucket>();
@@ -174,6 +234,126 @@ public static class SufelAssemblyResolver
         }
 
         return map;
+    }
+
+    private static bool IsCompleteDrawerBucket(RoleBucket bucket)
+    {
+        var bokKs = bucket.Boky.Sum(p => p.PocetKs ?? 1);
+        var celoKs = bucket.Cela.Sum(p => p.PocetKs ?? 1);
+        var zadKs = bucket.Zady.Sum(p => p.PocetKs ?? 1);
+        var dnoKs = bucket.Dna.Sum(p => p.PocetKs ?? 1);
+        return bokKs == 2 && celoKs == 1 && zadKs == 1 && dnoKs is 0 or 1;
+    }
+
+    /// <summary>
+    /// Rozdelí súhrnné riadky (bok 8 ks, čelo 4 ks…) medzi N šuflí – každá dostane 2× bok, 1× čelo, zad, dno.
+    /// </summary>
+    private static void DistributeAggregated(
+        PartsStore store,
+        IReadOnlyList<SufelSkupina> skupiny,
+        List<Part> sufelParts,
+        List<string> warnings)
+    {
+        var bokQueue = BuildUnitQueue(sufelParts.Where(p => p.Kind == PartKind.SufelBok));
+        var celoQueue = BuildUnitQueue(sufelParts.Where(p => p.Kind == PartKind.SufelCelo));
+        var zadQueue = BuildUnitQueue(sufelParts.Where(p => p.Kind == PartKind.SufelZad));
+        var dnoQueue = BuildUnitQueue(sufelParts.Where(p => p.Kind == PartKind.SufelDno));
+        var consumed = new Dictionary<Part, int>();
+
+        foreach (var sk in skupiny)
+        {
+            sk.BokPart = TakeDrawerBok(bokQueue, sk, store, consumed, warnings);
+            sk.CeloPart = TakeDrawerUnit(celoQueue, sk, store, consumed);
+            sk.ZadPart = TakeDrawerUnit(zadQueue, sk, store, consumed);
+            sk.DnoPart = TakeDrawerUnit(dnoQueue, sk, store, consumed);
+        }
+
+        FinalizeConsumedSources(store, consumed, warnings);
+    }
+
+    private static Queue<Part> BuildUnitQueue(IEnumerable<Part> parts)
+    {
+        var queue = new Queue<Part>();
+        foreach (var part in parts)
+        {
+            var ks = part.PocetKs ?? 1;
+            for (var i = 0; i < ks; i++)
+                queue.Enqueue(part);
+        }
+
+        return queue;
+    }
+
+    private static Part? TakeDrawerBok(
+        Queue<Part> queue,
+        SufelSkupina sk,
+        PartsStore store,
+        Dictionary<Part, int> consumed,
+        List<string> warnings)
+    {
+        if (queue.Count < 2)
+            return null;
+
+        var first = queue.Dequeue();
+        var second = queue.Dequeue();
+        if (!ReferenceEquals(first, second))
+        {
+            warnings.Add($"{sk.Nazov}: bok šufle z viacerých riadkov – použitý prvý ({first.Name}).");
+            queue.Enqueue(second);
+        }
+
+        return TakeDrawerSlice(first, 2, sk, store, consumed);
+    }
+
+    private static Part? TakeDrawerUnit(
+        Queue<Part> queue,
+        SufelSkupina sk,
+        PartsStore store,
+        Dictionary<Part, int> consumed)
+    {
+        if (!queue.TryDequeue(out var source))
+            return null;
+
+        return TakeDrawerSlice(source, 1, sk, store, consumed);
+    }
+
+    private static Part TakeDrawerSlice(
+        Part source,
+        int pocetKs,
+        SufelSkupina sk,
+        PartsStore store,
+        Dictionary<Part, int> consumed)
+    {
+        consumed.TryGetValue(source, out var taken);
+        consumed[source] = taken + pocetKs;
+
+        var clone = ClonePart(source);
+        clone.PocetKs = pocetKs;
+        clone.SufelSkupinaId = sk.Id;
+
+        var insertAt = store.Parts.IndexOf(source);
+        if (insertAt < 0)
+            insertAt = store.Parts.Count;
+        store.Parts.Insert(insertAt, clone);
+        return clone;
+    }
+
+    private static void FinalizeConsumedSources(
+        PartsStore store,
+        Dictionary<Part, int> consumed,
+        List<string> warnings)
+    {
+        foreach (var (source, taken) in consumed)
+        {
+            var total = source.PocetKs ?? 1;
+            var remaining = total - taken;
+            if (remaining < 0)
+                warnings.Add($"Diel „{source.Name}“: pri rozdelení šuflí chýba {-remaining} ks.");
+            else if (remaining == 0)
+                store.Parts.Remove(source);
+            else
+                source.PocetKs = remaining;
+        }
     }
 
     private static Part? PickPrimary(IReadOnlyList<Part> parts)

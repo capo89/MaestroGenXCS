@@ -17,7 +17,7 @@ public static class Sufel_Movento
 
     public static SufelMoventoSekcia CreateDefaultSekcia(int index) => new()
     {
-        Nazov = $"Šufľa {index}",
+        Nazov = $"Šufel {index}",
         DlzkaKovania = MoventoDlzkaKovania.Kratka250_270,
         VyskaMm = 0,
         OdsadenieOdPreduMm = 0,
@@ -62,7 +62,7 @@ public sealed partial class SufelMoventoSekcia : ObservableObject
     private Guid? _sufelSkupinaId;
 
     [ObservableProperty]
-    private string _nazov = "Šufľa 1";
+    private string _nazov = "Šufel 1";
 
     /// <summary>
     /// Výška sekcie na boku v osi X (mm od spodu dielca).

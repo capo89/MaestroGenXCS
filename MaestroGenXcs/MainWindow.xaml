@@ -109,7 +109,7 @@
                             <HierarchicalDataTemplate DataType="{x:Type vm:SufelTreeNode}"
                                                       ItemsSource="{Binding PartEntries}">
                                 <StackPanel Orientation="Horizontal" Margin="0,1,0,1"
-                                            ToolTip="Šufľa – 2× bok, 1× čelo, 1× zad, 1× dno (bok sa nedeľí na L/P).">
+                                            ToolTip="Šufel – 2× bok, 1× čelo, 1× zad, 1× dno (bok sa nedeľí na L/P). Rozklikni pre dielce.">
                                     <ContentControl Content="{Binding}"
                                                     ContentTemplate="{StaticResource SetupStatusIconTemplate}"/>
                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"/>

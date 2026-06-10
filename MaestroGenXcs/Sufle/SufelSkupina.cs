@@ -28,9 +28,7 @@ public sealed partial class SufelSkupina : ObservableObject
     [ObservableProperty]
     private Part? _dnoPart;
 
-    public string Nazov => Pozicia == SufelPozicia.Nezadana
-        ? $"Šufľa {PoradieOdSpodu}"
-        : $"Šufľa {Pozicia.ToShortLabel()}";
+    public string Nazov => $"Šufel {PoradieOdSpodu}";
 
     public int BokKsOcekavane => 2;
 

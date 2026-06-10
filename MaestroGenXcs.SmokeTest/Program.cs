@@ -255,6 +255,12 @@ Console.WriteLine(new string('=', 50));
     else
         Fail("Sufel parser – dno bez pozície", $"{pDno}");
 
+    var pCislo = SufelNameParser.Parse("bok šufel 1");
+    if (pCislo.JeSufel && pCislo.Rola == SufelNameParser.SufelRola.Bok && pCislo.Cislo == 1)
+        Pass("Sufel parser – bok šufel 1");
+    else
+        Fail("Sufel parser – bok šufel 1", $"{pCislo}");
+
     var store = new PartsStore();
     var asm = new AssemblyStore();
     const string z = "7";
@@ -291,6 +297,62 @@ Console.WriteLine(new string('=', 50));
         Pass("Sufel resolver – rozdelené dno (3×1 ks)");
     else
         Fail("Sufel resolver – rozdelené dno", $"dna={dna.Count}, ks=[{string.Join(",", dna.Select(p => p.PocetKs))}]");
+
+    if (ctx.SufelSkupiny.Select(s => s.Nazov).SequenceEqual(new[] { "Šufel 1", "Šufel 2", "Šufel 3" }))
+        Pass("Sufel resolver – názvy Šufel 1–3");
+    else
+        Fail("Sufel resolver – názvy", string.Join(", ", ctx.SufelSkupiny.Select(s => s.Nazov)));
+
+    var storeNum = new PartsStore();
+    var asmNum = new AssemblyStore();
+    const string zn = "8";
+    void AddNum(string name, int ks) =>
+        storeNum.Parts.Add(new Part(name, 400, 300, 18) { Zostava = zn, PocetKs = ks });
+
+    AddNum("bok šufel 1", 2);
+    AddNum("čelo šufel 1", 1);
+    AddNum("zad šufel 1", 1);
+    AddNum("dno šufle 1", 1);
+    AddNum("bok šufel 2", 2);
+    AddNum("čelo šufel 2", 1);
+    AddNum("zad šufel 2", 1);
+    AddNum("dno šufle 2", 1);
+    AddNum("bok šufel 3", 2);
+    AddNum("čelo šufel 3", 1);
+    AddNum("zad šufel 3", 1);
+    AddNum("dno šufle 3", 1);
+
+    asmNum.SyncFromParts(storeNum.Parts);
+    SufelAssemblyResolver.Resolve(storeNum, asmNum);
+    var ctxNum = asmNum.GetContext(zn)!;
+    if (ctxNum.SufelSkupiny.Count == 3
+        && ctxNum.SufelSkupiny.All(s => s.JeKompletna)
+        && ctxNum.SufelSkupiny.All(s => s.EnumeratePartsInDisplayOrder().Any()))
+        Pass("Sufel resolver – číslované názvy (3× kompletné)");
+    else
+        Fail("Sufel resolver – číslované názvy", string.Join("; ", ctxNum.SufelSkupiny.Select(s => $"{s.Nazov}:{s.JeKompletna}")));
+
+    var storeAgg = new PartsStore();
+    var asmAgg = new AssemblyStore();
+    const string za = "9";
+    void AddAgg(string name, int ks) =>
+        storeAgg.Parts.Add(new Part(name, 400, 300, 18) { Zostava = za, PocetKs = ks });
+
+    AddAgg("bok sufel", 8);
+    AddAgg("celo sufel", 4);
+    AddAgg("zad sufel", 4);
+    AddAgg("dno sufel", 4);
+
+    asmAgg.SyncFromParts(storeAgg.Parts);
+    SufelAssemblyResolver.Resolve(storeAgg, asmAgg);
+    var ctxAgg = asmAgg.GetContext(za)!;
+    if (ctxAgg.SufelSkupiny.Count == 4
+        && ctxAgg.SufelSkupiny.All(s => s.JeKompletna)
+        && ctxAgg.SufelSkupiny.Select(s => s.Nazov).SequenceEqual(new[] { "Šufel 1", "Šufel 2", "Šufel 3", "Šufel 4" })
+        && ctxAgg.SufelSkupiny.All(s => s.BokPart?.PocetKs == 2 && s.CeloPart?.PocetKs == 1))
+        Pass("Sufel resolver – súhrnné riadky (8+4+4+4 ks → 4 šufle)");
+    else
+        Fail("Sufel resolver – súhrnné riadky", string.Join("; ", ctxAgg.SufelSkupiny.Select(s => $"{s.Nazov} bok={s.BokPart?.PocetKs}")));
 }
 
 // --- 6. Boky skrinky z kusovníka (bok (1), bok 2) ---

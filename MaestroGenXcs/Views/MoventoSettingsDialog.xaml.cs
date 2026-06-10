@@ -39,7 +39,7 @@ public partial class MoventoSettingsDialog : Window
             return;
         _ctx.MoventoSekcie.Remove(sekcia);
         for (var i = 0; i < _ctx.MoventoSekcie.Count; i++)
-            _ctx.MoventoSekcie[i].Nazov = $"Šufľa {i + 1}";
+            _ctx.MoventoSekcie[i].Nazov = $"Šufel {i + 1}";
     }
 
     private void OnOk_Click(object sender, RoutedEventArgs e)
