@@ -5,10 +5,14 @@ using MaestroGenXcs.Sufle;
 namespace MaestroGenXcs.Services;
 
 /// <summary>
-/// Rozpozná boky skrinky z kusovníka (napr. „bok (1)“, „bok 2“) – nie šufľové „bok sufel …“.
+/// Rozpozná konštrukčné boky skrinky z kusovníka.
+/// „bok N“ = bok zostavy č. N (číslo zostavy, nie ľavý/pravý).
+/// L/P len z explicitných značiek: (1), (2), bok l/p, ľavý/pravý – nie šufľové „bok sufel …“.
 /// </summary>
 public static class CabinetBokClassifier
 {
+    private static readonly Regex BokAssemblyNumberPattern =
+        new(@"\bbok\s+(\d+)\b", RegexOptions.CultureInvariant);
     public static void Apply(IEnumerable<Part> parts)
     {
         foreach (var grp in parts.GroupBy(p => p.Zostava ?? "Bez zostavy", StringComparer.OrdinalIgnoreCase))
@@ -83,15 +87,11 @@ public static class CabinetBokClassifier
 
         if (!assignedL)
         {
-            var forL = candidates.FirstOrDefault(p => p.Kind != PartKind.BokP) ?? candidates[0];
+            var zostava = members.FirstOrDefault()?.Zostava;
+            var forL = candidates.FirstOrDefault(p => BokNumberMatchesZostava(p.Name, zostava))
+                ?? candidates.FirstOrDefault(p => p.Kind != PartKind.BokP)
+                ?? candidates[0];
             forL.Kind = PartKind.BokL;
-        }
-
-        if (!assignedP)
-        {
-            var forP = candidates.FirstOrDefault(p => p.Kind != PartKind.BokL) ?? candidates.Last();
-            if (forP.Kind != PartKind.BokL || candidates.Count > 1)
-                forP.Kind = PartKind.BokP;
         }
     }
 
@@ -122,23 +122,35 @@ public static class CabinetBokClassifier
     private static PartKind? InferSide(string? rawName)
     {
         var n = Normalize(rawName ?? "");
-        if (Regex.IsMatch(n, @"\b(bok\s*)?(\(1\)|_l\b|\bl\b|lav|lavy|lave)\b")
-            && !Regex.IsMatch(n, @"\bbok\s*2\b"))
+        if (Regex.IsMatch(n, @"\bbok\s+\(1\)"))
             return PartKind.BokL;
-
-        if (Regex.IsMatch(n, @"\b(bok\s*)?(\(2\)|_p\b|\bp\b|prav|pravy|prave)\b"))
+        if (Regex.IsMatch(n, @"\bbok\s+\(2\)"))
             return PartKind.BokP;
 
-        if (Regex.IsMatch(n, @"\bbok\s+2\b"))
-            return PartKind.BokP;
-
-        if (Regex.IsMatch(n, @"\bbok\s+\(1\)\b") || Regex.IsMatch(n, @"\bbok\s+1\b"))
+        if (Regex.IsMatch(n, @"\b_l\b|\bbok\s+l\b|lav|lavy|lave"))
             return PartKind.BokL;
+        if (Regex.IsMatch(n, @"\b_p\b|\bbok\s+p\b|prav|pravy|prave"))
+            return PartKind.BokP;
 
         return null;
     }
 
-    /// <summary>Uprednostní konštrukčný bok L/P podľa názvu (nie číslo zostavy v „bok 3“).</summary>
+    private static bool BokNumberMatchesZostava(string? rawName, string? zostava)
+    {
+        if (string.IsNullOrWhiteSpace(zostava))
+            return false;
+
+        var n = TryParseBokAssemblyNumber(rawName);
+        return n != null && string.Equals(n, zostava.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryParseBokAssemblyNumber(string? rawName)
+    {
+        var m = BokAssemblyNumberPattern.Match(Normalize(rawName ?? ""));
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>Uprednostní bok s explicitnou stranou L/P pred „bok N“ (číslo zostavy).</summary>
     private static int StructuralBokPriority(string? rawName)
     {
         var side = InferSide(rawName);

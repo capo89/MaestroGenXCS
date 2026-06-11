@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MaestroGenXcs.Domain;
+using MaestroGenXcs.Import;
 using MaestroGenXcs.Operations;
 using MaestroGenXcs.Services;
 using MaestroGenXcs.Sufle;
@@ -355,22 +356,22 @@ Console.WriteLine(new string('=', 50));
         Fail("Sufel resolver – súhrnné riadky", string.Join("; ", ctxAgg.SufelSkupiny.Select(s => $"{s.Nazov} bok={s.BokPart?.PocetKs}")));
 }
 
-// --- 6. Boky skrinky z kusovníka (bok (1), bok 2) ---
+// --- 6. Boky skrinky – L/P z (1)/(2), nie z čísla zostavy ---
 {
     var parts = new List<Part>
     {
         new("bok (1)", 2000, 320, 18) { Zostava = "1", Poradie = 3 },
-        new("bok 2", 2000, 320, 18) { Zostava = "1", Poradie = 5 },
+        new("bok (2)", 2000, 320, 18) { Zostava = "1", Poradie = 5 },
         new("bok sufel 1", 400, 300, 18) { Zostava = "1", PocetKs = 8 },
     };
     CabinetBokClassifier.Apply(parts);
     var bokL = parts.FirstOrDefault(p => p.Kind == PartKind.BokL);
     var bokP = parts.FirstOrDefault(p => p.Kind == PartKind.BokP);
     var sufelBok = parts.First(p => p.Name.StartsWith("bok sufel"));
-    if (bokL?.Name == "bok (1)" && bokP?.Name == "bok 2" && sufelBok.Kind == PartKind.Generic)
-        Pass("CabinetBok – bok (1)/bok 2 vs bok sufel");
+    if (bokL?.Name == "bok (1)" && bokP?.Name == "bok (2)" && sufelBok.Kind == PartKind.Generic)
+        Pass("CabinetBok – bok (1)/bok (2) vs bok sufel");
     else
-        Fail("CabinetBok – bok (1)/bok 2", $"L={bokL?.Name}/{bokL?.Kind}, P={bokP?.Name}/{bokP?.Kind}, sufel={sufelBok.Kind}");
+        Fail("CabinetBok – bok (1)/bok (2)", $"L={bokL?.Name}/{bokL?.Kind}, P={bokP?.Name}/{bokP?.Kind}, sufel={sufelBok.Kind}");
 
     var store = new PartsStore();
     foreach (var p in parts)
@@ -404,7 +405,20 @@ Console.WriteLine(new string('=', 50));
         Fail("CabinetBok – krycí bok", $"ref={refName}, kryciKind={parts[0].Kind}");
 }
 
-// --- 8. Pomocný bok nie je referencia ---
+// --- 8. „bok N“ = zostava N, nie L/P ---
+{
+    var parts = new List<Part>
+    {
+        new("bok 2", 2130, 560, 18) { Zostava = "2", Poradie = 3 },
+    };
+    CabinetBokClassifier.Apply(parts);
+    if (parts[0].Kind == PartKind.BokL)
+        Pass("CabinetBok – bok 2 v zostave 2 nie je BokP");
+    else
+        Fail("CabinetBok – bok 2 nie je BokP", $"kind={parts[0].Kind}");
+}
+
+// --- 9. Pomocný bok nie je referencia ---
 {
     var parts = new List<Part>
     {
@@ -424,7 +438,102 @@ Console.WriteLine(new string('=', 50));
         Fail("CabinetBok – pomocný bok", $"ref={refName}, pomocnaKind={parts[0].Kind}");
 }
 
-// --- 9. VzoryXcs súbor na disku ---
+// --- 10. Bok kusovník – rozdelenie ks a L/P ---
+{
+    var expander = new BokKusovnikExpander();
+
+    static string Fmt(IEnumerable<Part> parts) =>
+        string.Join("; ", parts.Select(p => $"{p.Name} z={p.Zostava} ks={p.PocetKs} {p.Kind}"));
+
+    if (expander.TryExpand("1_bok 4", 2, out var v1))
+    {
+        var parts = v1.Select(v => new Part(v.Name, 100, 100, 18)
+        {
+            Zostava = v.Zostava, PocetKs = v.PocetKs, Kind = v.Kind
+        }).ToList();
+        var ok = parts.Count == 2
+            && parts.Any(p => p.Name == "1_bok 4 L" && p.Zostava == "4" && p.PocetKs == 1 && p.Kind == PartKind.BokL)
+            && parts.Any(p => p.Name == "1_bok 4 P" && p.Zostava == "4" && p.PocetKs == 1 && p.Kind == PartKind.BokP);
+        if (ok) Pass("BokKusovnik – 1_bok 4 → L/P 1ks");
+        else Fail("BokKusovnik – 1_bok 4", Fmt(parts));
+    }
+    else Fail("BokKusovnik – 1_bok 4", "TryExpand false");
+
+    if (expander.TryExpand("3_bok 8,9,11", 6, out var v2))
+    {
+        var parts = v2.Select(v => new Part(v.Name, 100, 100, 18)
+        {
+            Zostava = v.Zostava, PocetKs = v.PocetKs, Kind = v.Kind
+        }).ToList();
+        var expected = new[]
+        {
+            ("3_bok 8 L", "8", 1, PartKind.BokL),
+            ("3_bok 8 P", "8", 1, PartKind.BokP),
+            ("3_bok 9 L", "9", 1, PartKind.BokL),
+            ("3_bok 9 P", "9", 1, PartKind.BokP),
+            ("3_bok 11 L", "11", 1, PartKind.BokL),
+            ("3_bok 11 P", "11", 1, PartKind.BokP),
+        };
+        var ok = parts.Count == 6 && expected.All(e => parts.Any(p =>
+            p.Name == e.Item1 && p.Zostava == e.Item2 && p.PocetKs == e.Item3 && p.Kind == e.Item4));
+        if (ok) Pass("BokKusovnik – 3_bok 8,9,11 → 6×1ks L/P");
+        else Fail("BokKusovnik – 3_bok 8,9,11", Fmt(parts));
+    }
+    else Fail("BokKusovnik – 3_bok 8,9,11", "TryExpand false");
+
+    if (expander.TryExpand("8_bok L", 1, out var v3))
+    {
+        if (v3.Count != 1)
+            Fail("BokKusovnik – 8_bok L", $"očakávaný 1 variant, je {v3.Count}: {string.Join("; ", v3.Select(x => x.Name))}");
+        else if (v3[0].Name == "8_bok L" && v3[0].Zostava == "8" && v3[0].PocetKs == 1 && v3[0].Kind == PartKind.BokL)
+            Pass("BokKusovnik – 8_bok L bez ďalšieho rozdelenia");
+        else
+            Fail("BokKusovnik – 8_bok L", $"{v3[0].Name} z={v3[0].Zostava} ks={v3[0].PocetKs} {v3[0].Kind}");
+    }
+    else Fail("BokKusovnik – 8_bok L", "TryExpand false");
+
+    if (expander.TryExpand("14_bok L 8,9", 2, out var v4))
+    {
+        var parts = v4.Select(v => new Part(v.Name, 100, 100, 18)
+        {
+            Zostava = v.Zostava, PocetKs = v.PocetKs, Kind = v.Kind
+        }).ToList();
+        var ok = parts.Count == 2
+            && parts.Any(p => p.Name == "14_bok 8 L" && p.Zostava == "8" && p.PocetKs == 1)
+            && parts.Any(p => p.Name == "14_bok 9 L" && p.Zostava == "9" && p.PocetKs == 1);
+        if (ok) Pass("BokKusovnik – 14_bok L 8,9 → 8 L + 9 L");
+        else Fail("BokKusovnik – 14_bok L 8,9", Fmt(parts));
+    }
+    else Fail("BokKusovnik – 14_bok L 8,9", "TryExpand false");
+
+    var bokRows = new List<Part>();
+    foreach (var row in new[] { ("8_bok L", 1), ("8_bok P", 1) })
+    {
+        if (!expander.TryExpand(row.Item1, row.Item2, out var vv))
+        {
+            Fail("BokKusovnik – 8_bok L+P v zostave", $"TryExpand false pre {row.Item1}");
+            bokRows.Clear();
+            break;
+        }
+        foreach (var v in vv)
+            bokRows.Add(new Part(v.Name, 2000, 560, 18) { Zostava = v.Zostava, PocetKs = v.PocetKs, Kind = v.Kind });
+    }
+    if (bokRows.Count == 2)
+    {
+        var store = new PartsStore();
+        foreach (var p in bokRows) store.Parts.Add(p);
+        var asm = new AssemblyStore();
+        asm.SyncFromParts(store.Parts);
+        var ctx = asm.GetContext("8");
+        if (ctx?.ReferenceBok?.Kind == PartKind.BokL
+            && bokRows.Any(p => p.Kind == PartKind.BokP && p.Zostava == "8"))
+            Pass("BokKusovnik – 8_bok L + 8_bok P v jednej zostave");
+        else
+            Fail("BokKusovnik – 8_bok L+P v zostave", $"ref={ctx?.ReferenceBok?.Name}, P={bokRows.FirstOrDefault(p => p.Kind == PartKind.BokP)?.Name}");
+    }
+}
+
+// --- 11. VzoryXcs súbor na disku ---
 {
     var repoRoot = FindRepoRoot();
     var vzorPath = Path.Combine(repoRoot, "VzoryXcs", "Polica-pevna.txt");

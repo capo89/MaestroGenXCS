@@ -24,6 +24,7 @@ public sealed class ExcelImporter
         new(@"(\d+)\s*$", RegexOptions.CultureInvariant);
 
     private readonly NameVariantExpander _expander = new();
+    private readonly BokKusovnikExpander _bokExpander = new();
     private readonly PartTypeHinter _hinter = new();
 
     public List<Part> Import(string filePath)
@@ -129,22 +130,7 @@ public sealed class ExcelImporter
             var absZadna = GetCellAbsOrNull(ws, row, 14);
             var absO = GetCellAbsOrNull(ws, row, 15);
 
-            foreach (var variant in _expander.Expand(nazov))
-            {
-                var zostava = variant.Zostava ?? ParseZostavaFromName(variant.Name);
-                var part = new Part(variant.Name, dx, dy, dz)
-                {
-                    Poradie = poradie,
-                    PocetKs = pocetKs,
-                    Zostava = string.IsNullOrWhiteSpace(zostava) ? "Bez zostavy" : zostava.Trim(),
-                    Kind = _hinter.Hint(variant.Name),
-                    AbsPredna = absPredna,
-                    AbsZadna = absZadna,
-                    AbsLava = absM,
-                    AbsPrava = absO
-                };
-                buffer.Add(part);
-            }
+            AppendPartsFromName(buffer, nazov, dx, dy, dz, pocetKs, poradie, absPredna, absM, absZadna, absO);
         }
 
         return buffer;
@@ -190,20 +176,60 @@ public sealed class ExcelImporter
             var dz = GetDouble(row, header, "hrubka", "hrúbka", "t", "thick", "dz");
             var pocetKs = GetCellIntFromHeader(row, header, "ks", "pocet", "počet");
 
-            foreach (var variant in _expander.Expand(nazov.Trim()))
-            {
-                var zostava = variant.Zostava ?? ParseZostavaFromName(variant.Name);
-                var part = new Part(variant.Name, dx, dy, dz)
-                {
-                    PocetKs = pocetKs,
-                    Zostava = string.IsNullOrWhiteSpace(zostava) ? "Bez zostavy" : zostava.Trim(),
-                    Kind = _hinter.Hint(variant.Name)
-                };
-                buffer.Add(part);
-            }
+            AppendPartsFromName(buffer, nazov.Trim(), dx, dy, dz, pocetKs, poradie: null);
         }
 
         return buffer;
+    }
+
+    private void AppendPartsFromName(
+        List<Part> buffer,
+        string nazov,
+        double dx,
+        double dy,
+        double dz,
+        int? pocetKs,
+        int? poradie,
+        int? absPredna = null,
+        int? absM = null,
+        int? absZadna = null,
+        int? absO = null)
+    {
+        if (_bokExpander.TryExpand(nazov, pocetKs, out var bokVariants))
+        {
+            foreach (var v in bokVariants)
+            {
+                buffer.Add(new Part(v.Name, dx, dy, dz)
+                {
+                    Poradie = poradie,
+                    PocetKs = v.PocetKs,
+                    Zostava = v.Zostava,
+                    Kind = v.Kind,
+                    AbsPredna = absPredna,
+                    AbsZadna = absZadna,
+                    AbsLava = absM,
+                    AbsPrava = absO
+                });
+            }
+
+            return;
+        }
+
+        foreach (var variant in _expander.Expand(nazov))
+        {
+            var zostava = variant.Zostava ?? ParseZostavaFromName(variant.Name);
+            buffer.Add(new Part(variant.Name, dx, dy, dz)
+            {
+                Poradie = poradie,
+                PocetKs = pocetKs,
+                Zostava = string.IsNullOrWhiteSpace(zostava) ? "Bez zostavy" : zostava.Trim(),
+                Kind = _hinter.Hint(variant.Name),
+                AbsPredna = absPredna,
+                AbsZadna = absZadna,
+                AbsLava = absM,
+                AbsPrava = absO
+            });
+        }
     }
 
     private static string? ParseZostavaFromName(string name)
