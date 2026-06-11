@@ -3,13 +3,14 @@ using System.Text.RegularExpressions;
 using ClosedXML.Excel;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Services;
+using MaestroGenXcs.Sufle;
 
 namespace MaestroGenXcs.Import;
 
 /// <summary>
 /// Import dielcov z Excelu. Hlavný formát je OBJ kusovník (Baranovci):
 /// A = poradie, C = názov, D/G/S = DX/DY/DZ, I = počet ks,
-/// L/M/N/O = ABS hodnoty.
+/// L/M/N/O = ABS hodnoty (x1–x4; pri šufli sa predná ↔ zadná premapuje – <see cref="SufelAbsMapper"/>).
 /// Fallback je jednoduchý formát s hlavičkou v 1. riadku (Názov, Dĺžka, Šírka, Hrúbka).
 /// </summary>
 public sealed class ExcelImporter
@@ -199,16 +200,17 @@ public sealed class ExcelImporter
         {
             foreach (var v in bokVariants)
             {
+                var abs = MapAbs(v.Name, v.Kind, absPredna, absM, absZadna, absO);
                 buffer.Add(new Part(v.Name, dx, dy, dz)
                 {
                     Poradie = poradie,
                     PocetKs = v.PocetKs,
                     Zostava = v.Zostava,
                     Kind = v.Kind,
-                    AbsPredna = absPredna,
-                    AbsZadna = absZadna,
-                    AbsLava = absM,
-                    AbsPrava = absO
+                    AbsPredna = abs.Predna,
+                    AbsZadna = abs.Zadna,
+                    AbsLava = abs.Lava,
+                    AbsPrava = abs.Prava
                 });
             }
 
@@ -218,19 +220,30 @@ public sealed class ExcelImporter
         foreach (var variant in _expander.Expand(nazov))
         {
             var zostava = variant.Zostava ?? ParseZostavaFromName(variant.Name);
+            var kind = _hinter.Hint(variant.Name);
+            var abs = MapAbs(variant.Name, kind, absPredna, absM, absZadna, absO);
             buffer.Add(new Part(variant.Name, dx, dy, dz)
             {
                 Poradie = poradie,
                 PocetKs = pocetKs,
                 Zostava = string.IsNullOrWhiteSpace(zostava) ? "Bez zostavy" : zostava.Trim(),
-                Kind = _hinter.Hint(variant.Name),
-                AbsPredna = absPredna,
-                AbsZadna = absZadna,
-                AbsLava = absM,
-                AbsPrava = absO
+                Kind = kind,
+                AbsPredna = abs.Predna,
+                AbsZadna = abs.Zadna,
+                AbsLava = abs.Lava,
+                AbsPrava = abs.Prava
             });
         }
     }
+
+    private static SufelAbsMapper.AbsSides MapAbs(
+        string partName,
+        PartKind kind,
+        int? excelPredna,
+        int? excelLava,
+        int? excelZadna,
+        int? excelPrava) =>
+        SufelAbsMapper.MapFromExcel(partName, kind, excelPredna, excelLava, excelZadna, excelPrava);
 
     private static string? ParseZostavaFromName(string name)
     {
@@ -284,9 +297,13 @@ public sealed class ExcelImporter
             return i;
         if (cell.TryGetValue(out double d))
             return (int)Math.Round(d);
+        if (cell.TryGetValue(out bool b))
+            return b ? 1 : 0;
         var s = cell.GetString().Trim();
         if (string.IsNullOrEmpty(s))
             return null;
+        if (bool.TryParse(s, out var parsedBool))
+            return parsedBool ? 1 : 0;
         if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
             return v;
         if (double.TryParse(s.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var f))

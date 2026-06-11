@@ -113,6 +113,27 @@ public static class MaestroXcsBuilder
         => $"ExecMacro(\"{Sanitize(name)}\",\"Obeh_novy_DTD\",{FTrim(frezovaniePod)},{FTrim(absMm)},"
          + $"{B(vpredu)},{B(vlavo)},{B(vpravo)},{B(vzadu)},\"{freza}\",{odsavanie.ToString(CultureInfo.InvariantCulture)});\n";
 
+    /// <summary>
+    /// Vloží makro s parametrami nastavenými cez <see cref="SetMacroParam"/> (najprv parametre, potom toto).
+    /// Na rozdiel od <see cref="ExecMacro"/> umožní zmenu hodnôt pred spustením.
+    /// </summary>
+    public static string CreateMacro(string displayName, string macroFileName)
+        => $"CreateMacro(\"{Sanitize(displayName)}\",\"{Sanitize(macroFileName)}\");\n";
+
+    /// <summary>Priame spustenie makra – bez predchádzajúcich <see cref="SetMacroParam"/>.</summary>
+    public static string ExecMacro(string displayName, string macroFileName)
+        => $"ExecMacro(\"{Sanitize(displayName)}\",\"{Sanitize(macroFileName)}\");\n";
+
+    /// <summary>Boolean parametre makra – malé <c>true</c>/<c>false</c> (nie <c>True</c>/<c>False</c>).</summary>
+    public static string SetMacroParam(string name, bool value)
+        => $"SetMacroParam(\"{Sanitize(name)}\",{B(value)});\n";
+
+    public static string SetMacroParam(string name, int value)
+        => $"SetMacroParam(\"{Sanitize(name)}\",{value.ToString(CultureInfo.InvariantCulture)});\n";
+
+    public static string SetMacroParam(string name, double value)
+        => $"SetMacroParam(\"{Sanitize(name)}\",{FTrim(value)});\n";
+
     private static string B(bool v) => v ? "true" : "false";
 
     private static string Sanitize(string s) =>

@@ -8,6 +8,13 @@ using MaestroGenXcs.Sufle;
 using MaestroGenXcs.Xcs;
 
 // Automatické testy: XCS vzor, assembly solver, store, export.
+// Voliteľne: dotnet run --project MaestroGenXcs.SmokeTest -- --dump-sufel-xcs
+
+if (args.Contains("--dump-sufel-xcs", StringComparer.Ordinal))
+{
+    DumpSufelXcsSample();
+    return;
+}
 
 var failures = new List<string>();
 var passed = 0;
@@ -533,7 +540,154 @@ Console.WriteLine(new string('=', 50));
     }
 }
 
-// --- 11. VzoryXcs súbor na disku ---
+// --- 11. Sufel bok – dno18 z hrúbky dna ---
+{
+    var sk = new SufelSkupina();
+    sk.DnoPart = new Part("sufel dno", 400, 300, 18);
+    if (sk.BokMacro.Dno18)
+        Pass("SufelBok – dno18 true pri dne 18 mm");
+    else
+        Fail("SufelBok – dno18 pri 18 mm", $"Dno18={sk.BokMacro.Dno18}");
+
+    sk.DnoPart = new Part("sufel dno", 400, 300, 16);
+    if (!sk.BokMacro.Dno18)
+        Pass("SufelBok – dno18 false pri dne 16 mm");
+    else
+        Fail("SufelBok – dno18 pri 16 mm", $"Dno18={sk.BokMacro.Dno18}");
+
+    sk.DnoPart = new Part("sufel dno", 500, 18, 300);
+    if (sk.BokMacro.Dno18)
+        Pass("SufelBok – dno18 true pri hrúbke v Dy (nie Dz)");
+    else
+        Fail("SufelBok – dno18 hrúbka v Dy", $"Dno18={sk.BokMacro.Dno18}, min={SufelBokMacroParams.ResolveDnoThicknessMm(sk.DnoPart)}");
+}
+
+// --- 12. Šufel – ABS x1 (Excel predná) → zadná hrana ---
+{
+    var abs = SufelAbsMapper.MapFromExcel("sufel bok vrchny", PartKind.SufelBok, 1, null, null, null);
+    if (abs.Zadna == 1 && abs.Predna == null)
+        Pass("SufelAbs – x1 predná z Excelu → zadná hrana");
+    else
+        Fail("SufelAbs – x1 → zadná", $"pred={abs.Predna}, zad={abs.Zadna}");
+
+    var cabinet = SufelAbsMapper.MapFromExcel("bok L", PartKind.BokL, 1, null, null, null);
+    if (cabinet.Predna == 1 && cabinet.Zadna == null)
+        Pass("SufelAbs – skrinka bez premapovania");
+    else
+        Fail("SufelAbs – skrinka", $"pred={cabinet.Predna}, zad={cabinet.Zadna}");
+}
+
+// --- 13. Šufel – sync bok ↔ čelo/zad ---
+{
+    var sk = new SufelSkupina
+    {
+        CeloPart = new Part("sufel celo", 400, 200, 18) { Kind = PartKind.SufelCelo },
+        ZadPart = new Part("sufel zad", 400, 200, 18) { Kind = PartKind.SufelZad },
+    };
+    sk.BokMacro.PocetDier = 3;
+    sk.BokMacro.RoztecDierMm = 40;
+    sk.BokMacro.PolohaDieryYmm = 50;
+    SufelMacroSynchronizer.SyncAll(sk);
+
+    var ok = Math.Abs(sk.BokMacro.PolohaDieryXmm - 9) < 0.01
+        && sk.CeloZadMacro.PocetDier == 3
+        && Math.Abs(sk.CeloZadMacro.RoztecDierMm - 40) < 0.01
+        && Math.Abs(sk.CeloZadMacro.PolohaDieryMm - 48) < 0.01;
+    if (ok)
+        Pass("SufelMacro – PolohaDieryX=9, PolohaDiery=48 pri čele 18 mm");
+    else
+        Fail("SufelMacro – sync bok↔čelo/zad",
+            $"X={sk.BokMacro.PolohaDieryXmm}, Pocet={sk.CeloZadMacro.PocetDier}, Poloha={sk.CeloZadMacro.PolohaDieryMm}");
+
+    sk.CeloPart = new Part("sufel celo", 400, 200, 16) { Kind = PartKind.SufelCelo };
+    SufelMacroSynchronizer.SyncPolohaDieryXFromCeloZad(sk);
+    if (Math.Abs(sk.BokMacro.PolohaDieryXmm - 8) < 0.01)
+        Pass("SufelMacro – PolohaDieryX=8 pri čele 16 mm");
+    else
+        Fail("SufelMacro – hrúbka 16 mm", $"X={sk.BokMacro.PolohaDieryXmm}");
+}
+
+// --- 14. Šufel – export názov súboru ---
+{
+    var part = new Part("sufel bok", 400, 200, 18)
+    {
+        Kind = PartKind.SufelBok,
+        Poradie = 14,
+        Zostava = "4",
+    };
+    var name = SufelXcsExportNames.BuildFileName(part);
+    if (name == "14_sufel bok 4.xcs")
+        Pass("SufelXcsExport – 14_sufel bok 4.xcs");
+    else
+        Fail("SufelXcsExport – názov", name);
+}
+
+// --- 15. Sufel bok – SetMacroParam + CreateMacro SufelBok2_novy ---
+{
+    var sk = new SufelSkupina
+    {
+        BokPart = new Part("sufel bok", 564, 320, 18) { Kind = PartKind.SufelBok },
+        CeloPart = new Part("sufel celo", 564, 150, 18) { Kind = PartKind.SufelCelo },
+        DnoPart = new Part("sufel dno", 500, 300, 18) { Kind = PartKind.SufelDno },
+    };
+    sk.BokMacro.PolohaDieryYmm = 50;
+    sk.BokMacro.PocetDier = 2;
+    sk.BokMacro.RoztecDierMm = 32;
+    sk.ZadPart = new Part("sufel zad", 564, 150, 18) { Kind = PartKind.SufelZad };
+    SufelMacroApplier.Apply(sk);
+
+    var xcs = BuildXcs(sk.BokPart!);
+    var macroIdx = xcs.IndexOf("CreateMacro(\"sufelbok2_novy\"", StringComparison.Ordinal);
+    var ok = macroIdx >= 0
+        && !xcs.Contains("ExecMacro(\"sufelbok2_novy\"", StringComparison.Ordinal)
+        && xcs.Contains("SetMacroParam(\"PocetDier\",2);", StringComparison.Ordinal)
+        && xcs.Contains("SetMacroParam(\"RoztecDier\",32);", StringComparison.Ordinal)
+        && xcs.Contains("SetMacroParam(\"dno18\",true);", StringComparison.Ordinal)
+        && xcs.IndexOf("SetMacroParam(\"PocetDier\",2);", StringComparison.Ordinal) < macroIdx
+        && !xcs.Contains("SetMacroParam(\"dx1\"", StringComparison.Ordinal)
+        && !xcs.Contains("SetMacroParam(\"dy1\"", StringComparison.Ordinal)
+        && !xcs.Contains("SetMacroParam(\"dz1\"", StringComparison.Ordinal)
+        && !xcs.Contains("SetMacroParam(\"PolohaDieryX\",9);", StringComparison.Ordinal)
+        && !xcs.Contains("SetMacroParam(\"HlbkaDier\",13);", StringComparison.Ordinal)
+        && !xcs.Contains("SetRetractStrategy", StringComparison.Ordinal)
+        && !xcs.Contains("Obeh_novy_DTD", StringComparison.Ordinal);
+    if (ok)
+        Pass("SufelBok – SetMacroParam + CreateMacro len zmenené");
+    else
+        Fail("SufelBok – SetMacroParam + CreateMacro", xcs.Replace('\n', ' ')[..Math.Min(500, xcs.Length)]);
+
+    if (!xcs.Contains("Obeh_novy_DTD", StringComparison.Ordinal))
+        Pass("SufelBok – export bez obehu");
+    else
+        Fail("SufelBok – export bez obehu", "nájdený Obeh_novy_DTD");
+
+    var celoXcs = BuildXcs(sk.CeloPart!);
+    var celoMacroIdx = celoXcs.IndexOf("CreateMacro(\"sufelcelozad2\"", StringComparison.Ordinal);
+    var celoOk = celoMacroIdx >= 0
+        && !celoXcs.Contains("ExecMacro(\"sufelcelozad2\"", StringComparison.Ordinal)
+        && celoXcs.Contains("SetMacroParam(\"CeloZad\",true);", StringComparison.Ordinal)
+        && celoXcs.Contains("SetMacroParam(\"PolohaDiery\",48);", StringComparison.Ordinal)
+        && celoXcs.Contains("SetMacroParam(\"RoztecDier\",32);", StringComparison.Ordinal)
+        && celoXcs.IndexOf("SetMacroParam(\"CeloZad\",true);", StringComparison.Ordinal) < celoMacroIdx
+        && !celoXcs.Contains("SetMacroParam(\"dx1\"", StringComparison.Ordinal);
+    if (celoOk)
+        Pass("SufelCelo – CreateMacro + CeloZad=true");
+    else
+        Fail("SufelCelo – export", celoXcs.Replace('\n', ' ')[..Math.Min(400, celoXcs.Length)]);
+
+    var zadXcs = BuildXcs(sk.ZadPart!);
+    var zadOk = zadXcs.Contains("CreateMacro(\"sufelcelozad2\"", StringComparison.Ordinal)
+        && !zadXcs.Contains("ExecMacro(\"sufelcelozad2\"", StringComparison.Ordinal)
+        && zadXcs.Contains("SetMacroParam(\"PolohaDiery\",48);", StringComparison.Ordinal)
+        && !zadXcs.Contains("SetMacroParam(\"CeloZad\"", StringComparison.Ordinal)
+        && !zadXcs.Contains("SetMacroParam(\"dx1\"", StringComparison.Ordinal);
+    if (zadOk)
+        Pass("SufelZad – CreateMacro bez CeloZad");
+    else
+        Fail("SufelZad – export", zadXcs.Replace('\n', ' ')[..Math.Min(400, zadXcs.Length)]);
+}
+
+// --- 16. VzoryXcs súbor na disku ---
 {
     var repoRoot = FindRepoRoot();
     var vzorPath = Path.Combine(repoRoot, "VzoryXcs", "Polica-pevna.txt");
@@ -557,6 +711,52 @@ if (failures.Count > 0)
 
 Console.WriteLine("Všetky testy prešli.");
 Environment.Exit(0);
+
+static void DumpSufelXcsSample()
+{
+    var sk = new SufelSkupina
+    {
+        BokPart = new Part("sufel bok", 564, 320, 18)
+        {
+            Kind = PartKind.SufelBok, Poradie = 14, Zostava = "4", PocetKs = 2,
+            AbsZadna = 1,
+        },
+        CeloPart = new Part("sufel celo", 564, 150, 18)
+        {
+            Kind = PartKind.SufelCelo, Poradie = 15, Zostava = "4", PocetKs = 1,
+        },
+        ZadPart = new Part("sufel zad", 564, 150, 18)
+        {
+            Kind = PartKind.SufelZad, Poradie = 16, Zostava = "4", PocetKs = 1,
+        },
+        DnoPart = new Part("sufel dno", 500, 300, 18)
+        {
+            Kind = PartKind.SufelDno, Poradie = 17, Zostava = "4", PocetKs = 1,
+        },
+    };
+    sk.BokMacro.PolohaDieryYmm = 50;
+    sk.BokMacro.PocetDier = 2;
+    sk.BokMacro.RoztecDierMm = 32;
+    sk.BokMacro.HlbkaDrazkyMm = 12;
+    sk.BokMacro.PaskaMm = 0.8;
+    SufelMacroApplier.Apply(sk);
+
+    var exporter = new XcsExporter();
+    var outDir = Path.Combine(FindRepoRoot(), ".tmp_xcs_export");
+    Directory.CreateDirectory(outDir);
+
+    foreach (var part in new[] { sk.BokPart!, sk.CeloPart!, sk.ZadPart! })
+    {
+        var fileName = SufelXcsExportNames.BuildFileName(part);
+        var path = Path.Combine(outDir, fileName);
+        var content = exporter.BuildContent(part, XcsExporter.ContextFromPart(part));
+        File.WriteAllText(path, content, Encoding.UTF8);
+        Console.WriteLine($"===== {fileName} =====");
+        Console.WriteLine(content);
+        Console.WriteLine($"→ uložené: {path}");
+        Console.WriteLine();
+    }
+}
 
 static string FindRepoRoot()
 {

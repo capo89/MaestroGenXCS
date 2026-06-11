@@ -12,6 +12,7 @@ using MaestroGenXcs.Import;
 using MaestroGenXcs.Operations;
 using MaestroGenXcs.Rendering;
 using MaestroGenXcs.Services;
+using MaestroGenXcs.Sufle;
 using MaestroGenXcs.Xcs;
 using WpfOpen = Microsoft.Win32.OpenFileDialog;
 using WpfSave = Microsoft.Win32.SaveFileDialog;
@@ -84,7 +85,18 @@ public sealed partial class AssemblyViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedCorpusMode))]
     [NotifyPropertyChangedFor(nameof(HasSelectedZostava))]
     [NotifyPropertyChangedFor(nameof(ActiveZostavaForBinding))]
+    [NotifyPropertyChangedFor(nameof(IsSufelBokView))]
+    [NotifyPropertyChangedFor(nameof(IsCabinetAssemblyView))]
+    [NotifyPropertyChangedFor(nameof(CanAddObeh))]
     private Part? _selectedPart;
+
+    public bool IsSufelBokView => SelectedPart?.Kind == PartKind.SufelBok;
+
+    public bool IsCabinetAssemblyView => !IsSufelBokView;
+
+    /// <summary>Šufľové dielce nemajú obeh – ABS rieši makro, nie Obeh_novy_DTD.</summary>
+    public bool CanAddObeh =>
+        SelectedPart != null && !SufelNameParser.IsSufelKind(SelectedPart.Kind);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedZostavaText))]
@@ -150,6 +162,41 @@ public sealed partial class AssemblyViewModel : ObservableObject
 
     public AssemblyContext? GetAssemblyContext(string? zostava) =>
         _assemblyStore.GetContext(zostava);
+
+    public SufelSkupina? FindSufelSkupina(Part? part)
+    {
+        if (part == null)
+            return null;
+
+        var ctx = GetAssemblyContext(part.Zostava);
+        if (ctx == null)
+            return null;
+
+        if (part.SufelSkupinaId is Guid id)
+        {
+            var byId = ctx.SufelSkupiny.FirstOrDefault(s => s.Id == id);
+            if (byId != null)
+                return byId;
+        }
+
+        return ctx.SufelSkupiny.FirstOrDefault(s => ReferenceEquals(s.BokPart, part));
+    }
+
+    [RelayCommand]
+    private void BackToCabinetAssembly()
+    {
+        var zostava = ActiveZostava;
+        if (string.IsNullOrWhiteSpace(zostava))
+        {
+            SelectedPart = null;
+            return;
+        }
+
+        SelectedPart = GetAssemblyContext(zostava)?.ReferenceBok
+            ?? Parts.FirstOrDefault(p =>
+                string.Equals(p.Zostava, zostava, StringComparison.OrdinalIgnoreCase)
+                && p.Kind is PartKind.BokL or PartKind.BokP);
+    }
 
     public event EventHandler? Scene3DRefreshRequested;
 
@@ -679,6 +726,12 @@ public sealed partial class AssemblyViewModel : ObservableObject
             return;
         }
 
+        if (SufelNameParser.IsSufelKind(part.Kind))
+        {
+            StatusText = "Šufľové dielce nemajú obeh.";
+            return;
+        }
+
         var existing = part.Operations.OfType<ObehOperation>().FirstOrDefault();
         if (existing != null)
         {
@@ -960,6 +1013,8 @@ public sealed partial class AssemblyViewModel : ObservableObject
             return;
         }
 
+        EnsureSufelMacroOperations();
+
         var exporter = new XcsExporter();
         var ok = 0;
         var errors = new List<string>();
@@ -968,7 +1023,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         {
             try
             {
-                var path = Path.Combine(targetDir, SanitizeFileName(part.Name) + ".xcs");
+                var path = Path.Combine(targetDir, BuildExportFileName(part));
                 var ctx = XcsExporter.ContextFromPart(part);
                 exporter.ExportToFile(part, ctx, path);
                 ok++;
@@ -1000,13 +1055,14 @@ public sealed partial class AssemblyViewModel : ObservableObject
         var dlg = new WpfSave
         {
             Filter = "XCS súbor (*.xcs)|*.xcs",
-            FileName = SanitizeFileName(part.Name) + ".xcs"
+            FileName = BuildExportFileName(part)
         };
         if (dlg.ShowDialog() != true)
             return;
 
         try
         {
+            EnsureSufelMacroOperations();
             var exporter = new XcsExporter();
             var ctx = XcsExporter.ContextFromPart(part);
             exporter.ExportToFile(part, ctx, dlg.FileName);
@@ -1017,6 +1073,17 @@ public sealed partial class AssemblyViewModel : ObservableObject
             WpfMsg.Show(ex.Message, "Chyba exportu", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
+
+    private void EnsureSufelMacroOperations()
+    {
+        SufelMacroApplier.ApplyAll(_assemblyStore);
+        SufelMacroApplier.StripObehFromSufelParts(_store.Parts);
+    }
+
+    private static string BuildExportFileName(Part part) =>
+        SufelXcsExportNames.IsSufelExportPart(part)
+            ? SufelXcsExportNames.BuildFileName(part)
+            : SanitizeFileName(part.Name) + ".xcs";
 
     private static string SanitizeFileName(string name)
     {

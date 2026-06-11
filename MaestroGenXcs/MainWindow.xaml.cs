@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             Assembly3DView.Attach(vm);
+            SufelBokView.Attach(vm);
             SyncTreeSelectionToSelectedPart();
         };
         Closed += (_, _) => TemplateStore.Instance.SaveNow();

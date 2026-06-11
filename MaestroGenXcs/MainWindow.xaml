@@ -37,6 +37,8 @@
 
                             Command="{Binding AddOrUpdateObehCommand}"
 
+                            Visibility="{Binding CanAddObeh, Converter={StaticResource BoolToVis}}"
+
                             ToolTip="Pridať alebo aktualizovať obeh podľa ABS"/>
 
                     <Button Style="{StaticResource ToolbarButton}" Content="Export XCS"
@@ -139,7 +141,12 @@
 
             </Border>
 
-            <views:Assembly3DPanel x:Name="Assembly3DView" Grid.Column="1" Margin="8,0,0,0"/>
+            <Grid Grid.Column="1" Margin="8,0,0,0">
+                <views:Assembly3DPanel x:Name="Assembly3DView"
+                                       Visibility="{Binding IsCabinetAssemblyView, Converter={StaticResource BoolToVis}}"/>
+                <views:SufelBokPanel x:Name="SufelBokView"
+                                     Visibility="{Binding IsSufelBokView, Converter={StaticResource BoolToVis}}"/>
+            </Grid>
 
         </Grid>
 

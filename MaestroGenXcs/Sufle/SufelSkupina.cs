@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MaestroGenXcs.Domain;
+using MaestroGenXcs.Services;
 
 namespace MaestroGenXcs.Sufle;
 
@@ -8,6 +10,16 @@ namespace MaestroGenXcs.Sufle;
 /// </summary>
 public sealed partial class SufelSkupina : ObservableObject
 {
+    private Part? _wiredDnoPart;
+    private Part? _wiredCeloPart;
+    private Part? _wiredZadPart;
+
+    public SufelSkupina()
+    {
+        BokMacro.PropertyChanged += OnBokMacroPropertyChanged;
+        CeloZadMacro.PropertyChanged += OnCeloZadMacroPropertyChanged;
+    }
+
     public Guid Id { get; } = Guid.NewGuid();
 
     [ObservableProperty]
@@ -27,6 +39,12 @@ public sealed partial class SufelSkupina : ObservableObject
 
     [ObservableProperty]
     private Part? _dnoPart;
+
+    /// <summary>Parametre makra <c>SufelBok2_novy</c> pre bok tejto šufle.</summary>
+    public SufelBokMacroParams BokMacro { get; } = new();
+
+    /// <summary>Parametre makra <c>SufelCeloZad2</c> – odvodené z <see cref="BokMacro"/>.</summary>
+    public SufelCeloZadMacroParams CeloZadMacro { get; } = new();
 
     public string Nazov => $"Šufel {PoradieOdSpodu}";
 
@@ -63,4 +81,82 @@ public sealed partial class SufelSkupina : ObservableObject
 
     public HashSet<Guid> EnumeratePartIds() =>
         EnumeratePartsInDisplayOrder().Select(p => p.Id).ToHashSet();
+
+    private void OnBokMacroPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.PropertyName is nameof(SufelBokMacroParams.PocetDier)
+            or nameof(SufelBokMacroParams.RoztecDierMm)
+            or nameof(SufelBokMacroParams.PolohaDieryYmm))
+        {
+            SufelMacroSynchronizer.SyncCeloZadFromBok(this);
+        }
+
+        if (e.PropertyName is not null)
+            SufelMacroApplier.Apply(this);
+    }
+
+    private void OnCeloZadMacroPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.PropertyName is not null)
+            SufelMacroApplier.Apply(this);
+    }
+
+    partial void OnDnoPartChanged(Part? value)
+    {
+        if (_wiredDnoPart != null)
+            _wiredDnoPart.PropertyChanged -= OnDnoPartGeometryChanged;
+
+        _wiredDnoPart = value;
+        if (value != null)
+            value.PropertyChanged += OnDnoPartGeometryChanged;
+
+        BokMacro.SyncDno18FromDno(value);
+        SufelMacroApplier.Apply(this);
+    }
+
+    partial void OnBokPartChanged(Part? value) => SufelMacroApplier.Apply(this);
+
+    partial void OnCeloPartChanged(Part? value)
+    {
+        WireCeloZadThickness(ref _wiredCeloPart, value);
+        SufelMacroSynchronizer.SyncAll(this);
+        SufelMacroApplier.Apply(this);
+    }
+
+    partial void OnZadPartChanged(Part? value)
+    {
+        WireCeloZadThickness(ref _wiredZadPart, value);
+        SufelMacroSynchronizer.SyncAll(this);
+        SufelMacroApplier.Apply(this);
+    }
+
+    private void WireCeloZadThickness(ref Part? wired, Part? value)
+    {
+        if (wired != null)
+            wired.PropertyChanged -= OnCeloZadGeometryChanged;
+
+        wired = value;
+        if (value != null)
+            value.PropertyChanged += OnCeloZadGeometryChanged;
+    }
+
+    private void OnDnoPartGeometryChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Part.Dx) or nameof(Part.Dy) or nameof(Part.Dz))
+        {
+            BokMacro.SyncDno18FromDno(DnoPart);
+            SufelMacroApplier.Apply(this);
+        }
+    }
+
+    private void OnCeloZadGeometryChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Part.Dz))
+        {
+            SufelMacroSynchronizer.SyncPolohaDieryXFromCeloZad(this);
+            SufelMacroApplier.Apply(this);
+        }
+    }
 }

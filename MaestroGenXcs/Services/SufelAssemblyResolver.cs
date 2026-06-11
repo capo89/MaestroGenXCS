@@ -493,6 +493,10 @@ public static class SufelAssemblyResolver
             sk.ZadPart.SufelSkupinaId = sk.Id;
         if (sk.DnoPart != null)
             sk.DnoPart.SufelSkupinaId = sk.Id;
+
+        sk.BokMacro.SyncDno18FromDno(sk.DnoPart);
+        SufelMacroSynchronizer.SyncAll(sk);
+        SufelMacroApplier.Apply(sk);
     }
 
     private static int InferDrawerCount(IReadOnlyList<Part> sufelParts, List<string> warnings, string zostava)
