@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MaestroGenXcs.Chrbaty;
 using MaestroGenXcs.Sufle;
 
 namespace MaestroGenXcs.Domain;
@@ -25,4 +26,7 @@ public sealed partial class AssemblyContext : ObservableObject
 
     /// <summary>Zoskupené šufle po importe (2× bok, čelo, zad, dno).</summary>
     public ObservableCollection<SufelSkupina> SufelSkupiny { get; } = new();
+
+    /// <summary>Typ chrbátu a odsadenie od zadnej hrany (typ 2, 3).</summary>
+    public ChrbatZostavaNastavenia Chrbat { get; } = new();
 }

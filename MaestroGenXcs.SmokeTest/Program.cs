@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using MaestroGenXcs.Chrbaty;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Import;
 using MaestroGenXcs.Operations;
@@ -730,7 +731,56 @@ Console.WriteLine(new string('=', 50));
         Fail("SufelRozmery – nesúlad čelo", celoWarn ?? string.Join("; ", badResult.Warnings));
 }
 
-// --- 17. VzoryXcs súbor na disku ---
+// --- 17. Chrbát – vzorce Vyska/Sirka ---
+{
+    var kNal = new ChrbatKorpusDielce(1600, 500, 18, 18, 600, 464, 18, 600, 464, 18);
+    var r1 = ChrbatRozmeryResolver.ResolveNalozeny(AssemblyCorpusMode.BokNalozeny, kNal);
+    if (Math.Abs(r1.Vyska - 1600) < 0.01 && Math.Abs(r1.Sirka - 636) < 0.01)
+        Pass("Chrbat – bod 1 bok nalozený");
+    else
+        Fail("Chrbat – bod 1 bok nalozený", $"V={r1.Vyska}, S={r1.Sirka}");
+
+    var kVl = new ChrbatKorpusDielce(564, 320, 18, 18, 600, 320, 18, 600, 320, 18);
+    var r2 = ChrbatRozmeryResolver.ResolveVlozeny(AssemblyCorpusMode.BokVlozeny, kVl);
+    if (Math.Abs(r2.Vyska - 564) < 0.01 && Math.Abs(r2.Sirka - 564) < 0.01)
+        Pass("Chrbat – bod 2 bok vložený");
+    else
+        Fail("Chrbat – bod 2 bok vložený", $"V={r2.Vyska}, S={r2.Sirka}");
+
+    var r3b = ChrbatRozmeryResolver.ResolveDrazkaDnoVrch(AssemblyCorpusMode.BokVlozeny, kVl);
+    if (Math.Abs(r3b.Vyska - 588) < 0.01 && Math.Abs(r3b.Sirka - 588) < 0.01)
+        Pass("Chrbat – bod 3b −12 mm");
+    else
+        Fail("Chrbat – bod 3b", $"V={r3b.Vyska}, S={r3b.Sirka}");
+
+    var chrbat = new Part("chrbat", 564, 600, 18) { Kind = PartKind.Chrbat };
+    var panel = ChrbatPanelRozmery.FromPart(chrbat);
+    if (panel.MatchesVyskaSirka(564, 600, 0.5))
+        Pass("Chrbat – panel prehodené osi OK");
+    else
+        Fail("Chrbat – panel osi", $"{panel.RozmerA}×{panel.RozmerB}");
+
+    var rPart = ChrbatRozmeryResolver.ResolveNepoCelejVyskeSirka(AssemblyCorpusMode.BokNalozeny, kNal);
+    if (!rPart.KontrolujVysku && Math.Abs(rPart.Sirka - 624) < 0.01)
+        Pass("Chrbat – čiastočná výška Sirka bok nal. (636−12)");
+    else
+        Fail("Chrbat – čiastočná Sirka", $"KontrolujVysku={rPart.KontrolujVysku}, S={rPart.Sirka}");
+
+    var rPartVl = ChrbatRozmeryResolver.ResolveNepoCelejVyskeSirka(AssemblyCorpusMode.BokVlozeny, kVl);
+    if (Math.Abs(rPartVl.Sirka - 588) < 0.01)
+        Pass("Chrbat – čiastočná výška Sirka bok vl. (600−12)");
+    else
+        Fail("Chrbat – čiastočná Sirka vl.", $"S={rPartVl.Sirka}");
+
+    var chrbatPartial = new Part("chrbat", 400, 588, 18) { Kind = PartKind.Chrbat };
+    var panelPartial = ChrbatPanelRozmery.FromPart(chrbatPartial);
+    if (panelPartial.MatchesSirka(588, 0.5) && panelPartial.ResolveVyskaZDielca(588, 0.5) is 400)
+        Pass("Chrbat – Sirka OK, Vyska z dielca");
+    else
+        Fail("Chrbat – partial panel", $"{panelPartial.RozmerA}×{panelPartial.RozmerB}");
+}
+
+// --- 18. VzoryXcs súbor na disku ---
 {
     var repoRoot = FindRepoRoot();
     var vzorPath = Path.Combine(repoRoot, "VzoryXcs", "Polica-pevna.txt");

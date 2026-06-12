@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MaestroGenXcs.Chrbaty;
 using MaestroGenXcs.Domain;
 using MaestroGenXcs.Import;
 using MaestroGenXcs.Operations;
@@ -33,6 +34,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
     private readonly HashSet<Part> _setupRefreshWiredParts = new();
     private readonly HashSet<AssemblyPlacement> _setupRefreshWiredPlacements = new();
     private SufelAssemblyResolver.Result? _lastSufelResolveResult;
+    private ChrbatAssemblyValidator.Result? _lastChrbatValidateResult;
 
     private static readonly HashSet<string> PolicaRebuildProperties = new(StringComparer.Ordinal)
     {
@@ -393,6 +395,9 @@ public sealed partial class AssemblyViewModel : ObservableObject
                 text += $" ({sufel.Warnings.Count} upozornení)";
         }
 
+        if (_lastChrbatValidateResult is { Warnings.Count: > 0 } chrbat)
+            text += $", chrbát: {chrbat.Warnings.Count} upozornení";
+
         return text;
     }
 
@@ -402,6 +407,7 @@ public sealed partial class AssemblyViewModel : ObservableObject
         CabinetBokClassifier.Apply(_store.Parts);
         _assemblyStore.SyncFromParts(_store.Parts);
         _lastSufelResolveResult = SufelAssemblyResolver.Resolve(_store, _assemblyStore);
+        _lastChrbatValidateResult = ChrbatAssemblyValidator.ValidateAll(_assemblyStore, _store);
         MoventoSekcieSynchronizer.SyncAll(_assemblyStore);
         _store.RegenerateConnections();
         foreach (var p in _store.Parts)
