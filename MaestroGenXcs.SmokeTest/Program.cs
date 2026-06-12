@@ -272,19 +272,21 @@ Console.WriteLine(new string('=', 50));
     var store = new PartsStore();
     var asm = new AssemblyStore();
     const string z = "7";
-    void Add(string name, int ks) =>
-        store.Parts.Add(new Part(name, 400, 300, 18) { Zostava = z, PocetKs = ks });
+    const double bokDy = 300;
+    var celoZadDy = SufelRozmeryValidator.ResolveExpectedCeloZadDyMm(bokDy, 18);
+    void Add(string name, int ks, double dy) =>
+        store.Parts.Add(new Part(name, 400, dy, 18) { Zostava = z, PocetKs = ks });
 
-    Add("sufel bok vrchny", 2);
-    Add("sufel celo vrchny", 1);
-    Add("sufel zad vrchny", 1);
-    Add("sufel bok stredny", 2);
-    Add("sufel celo stredny", 1);
-    Add("sufel zad stredny", 1);
-    Add("sufel bok spodny", 2);
-    Add("sufel celo spodny", 1);
-    Add("sufel zad spodny", 1);
-    Add("sufel dno", 3);
+    Add("sufel bok vrchny", 2, bokDy);
+    Add("sufel celo vrchny", 1, celoZadDy);
+    Add("sufel zad vrchny", 1, celoZadDy);
+    Add("sufel bok stredny", 2, bokDy);
+    Add("sufel celo stredny", 1, celoZadDy);
+    Add("sufel zad stredny", 1, celoZadDy);
+    Add("sufel bok spodny", 2, bokDy);
+    Add("sufel celo spodny", 1, celoZadDy);
+    Add("sufel zad spodny", 1, celoZadDy);
+    store.Parts.Add(new Part("sufel dno", 400, 300, 18) { Zostava = z, PocetKs = 3 });
 
     asm.SyncFromParts(store.Parts);
     var result = SufelAssemblyResolver.Resolve(store, asm);
@@ -314,21 +316,21 @@ Console.WriteLine(new string('=', 50));
     var storeNum = new PartsStore();
     var asmNum = new AssemblyStore();
     const string zn = "8";
-    void AddNum(string name, int ks) =>
-        storeNum.Parts.Add(new Part(name, 400, 300, 18) { Zostava = zn, PocetKs = ks });
+    void AddNum(string name, int ks, double dy) =>
+        storeNum.Parts.Add(new Part(name, 400, dy, 18) { Zostava = zn, PocetKs = ks });
 
-    AddNum("bok šufel 1", 2);
-    AddNum("čelo šufel 1", 1);
-    AddNum("zad šufel 1", 1);
-    AddNum("dno šufle 1", 1);
-    AddNum("bok šufel 2", 2);
-    AddNum("čelo šufel 2", 1);
-    AddNum("zad šufel 2", 1);
-    AddNum("dno šufle 2", 1);
-    AddNum("bok šufel 3", 2);
-    AddNum("čelo šufel 3", 1);
-    AddNum("zad šufel 3", 1);
-    AddNum("dno šufle 3", 1);
+    AddNum("bok šufel 1", 2, bokDy);
+    AddNum("čelo šufel 1", 1, celoZadDy);
+    AddNum("zad šufel 1", 1, celoZadDy);
+    AddNum("bok šufel 2", 2, bokDy);
+    AddNum("čelo šufel 2", 1, celoZadDy);
+    AddNum("zad šufel 2", 1, celoZadDy);
+    AddNum("bok šufel 3", 2, bokDy);
+    AddNum("čelo šufel 3", 1, celoZadDy);
+    AddNum("zad šufel 3", 1, celoZadDy);
+    storeNum.Parts.Add(new Part("dno šufle 1", 400, 300, 18) { Zostava = zn, PocetKs = 1 });
+    storeNum.Parts.Add(new Part("dno šufle 2", 400, 300, 18) { Zostava = zn, PocetKs = 1 });
+    storeNum.Parts.Add(new Part("dno šufle 3", 400, 300, 18) { Zostava = zn, PocetKs = 1 });
 
     asmNum.SyncFromParts(storeNum.Parts);
     SufelAssemblyResolver.Resolve(storeNum, asmNum);
@@ -343,13 +345,13 @@ Console.WriteLine(new string('=', 50));
     var storeAgg = new PartsStore();
     var asmAgg = new AssemblyStore();
     const string za = "9";
-    void AddAgg(string name, int ks) =>
-        storeAgg.Parts.Add(new Part(name, 400, 300, 18) { Zostava = za, PocetKs = ks });
+    void AddAgg(string name, int ks, double dy) =>
+        storeAgg.Parts.Add(new Part(name, 400, dy, 18) { Zostava = za, PocetKs = ks });
 
-    AddAgg("bok sufel", 8);
-    AddAgg("celo sufel", 4);
-    AddAgg("zad sufel", 4);
-    AddAgg("dno sufel", 4);
+    AddAgg("bok sufel", 8, bokDy);
+    AddAgg("celo sufel", 4, celoZadDy);
+    AddAgg("zad sufel", 4, celoZadDy);
+    storeAgg.Parts.Add(new Part("dno sufel", 400, 300, 18) { Zostava = za, PocetKs = 4 });
 
     asmAgg.SyncFromParts(storeAgg.Parts);
     SufelAssemblyResolver.Resolve(storeAgg, asmAgg);
@@ -687,7 +689,48 @@ Console.WriteLine(new string('=', 50));
         Fail("SufelZad – export", zadXcs.Replace('\n', ' ')[..Math.Min(400, zadXcs.Length)]);
 }
 
-// --- 16. VzoryXcs súbor na disku ---
+// --- 16. Šufel – kontrola Dy čelo/zad podľa boku a hrúbky dna ---
+{
+    if (Math.Abs(SufelRozmeryValidator.ResolveExpectedCeloZadDyMm(250, 10) - 223) < 0.01
+        && Math.Abs(SufelRozmeryValidator.ResolveExpectedCeloZadDyMm(250, 18) - 215) < 0.01)
+        Pass("SufelRozmery – vzorec bok 250, dno 10/18 mm");
+    else
+        Fail("SufelRozmery – vzorec",
+            $"10mm={SufelRozmeryValidator.ResolveExpectedCeloZadDyMm(250, 10)}, 18mm={SufelRozmeryValidator.ResolveExpectedCeloZadDyMm(250, 18)}");
+
+    var storeOk = new PartsStore();
+    var asmOk = new AssemblyStore();
+    const string zOk = "roz-ok";
+    storeOk.Parts.Add(new Part("bok šufel 1", 564, 250, 18) { Zostava = zOk, PocetKs = 2, Kind = PartKind.SufelBok });
+    storeOk.Parts.Add(new Part("čelo šufel 1", 564, 223, 18) { Zostava = zOk, PocetKs = 1, Kind = PartKind.SufelCelo });
+    storeOk.Parts.Add(new Part("zad šufel 1", 564, 223, 18) { Zostava = zOk, PocetKs = 1, Kind = PartKind.SufelZad });
+    storeOk.Parts.Add(new Part("dno šufle 1", 500, 300, 10) { Zostava = zOk, PocetKs = 1, Kind = PartKind.SufelDno });
+    asmOk.SyncFromParts(storeOk.Parts);
+    var okResult = SufelAssemblyResolver.Resolve(storeOk, asmOk);
+    var okDyWarnings = okResult.Warnings.Count(w => w.Contains("Dy=", StringComparison.Ordinal));
+    if (okDyWarnings == 0)
+        Pass("SufelRozmery – bez výstrahy pri dne 10 mm");
+    else
+        Fail("SufelRozmery – OK dno 10", string.Join("; ", okResult.Warnings.Where(w => w.Contains("Dy=", StringComparison.Ordinal))));
+
+    var storeBad = new PartsStore();
+    var asmBad = new AssemblyStore();
+    const string zBad = "roz-bad";
+    storeBad.Parts.Add(new Part("bok šufel 1", 564, 250, 18) { Zostava = zBad, PocetKs = 2, Kind = PartKind.SufelBok });
+    storeBad.Parts.Add(new Part("čelo šufel 1", 564, 220, 18) { Zostava = zBad, PocetKs = 1, Kind = PartKind.SufelCelo });
+    storeBad.Parts.Add(new Part("zad šufel 1", 564, 215, 18) { Zostava = zBad, PocetKs = 1, Kind = PartKind.SufelZad });
+    storeBad.Parts.Add(new Part("dno šufle 1", 500, 300, 18) { Zostava = zBad, PocetKs = 1, Kind = PartKind.SufelDno });
+    asmBad.SyncFromParts(storeBad.Parts);
+    var badResult = SufelAssemblyResolver.Resolve(storeBad, asmBad);
+    var celoWarn = badResult.Warnings.FirstOrDefault(w => w.Contains("čelo Dy=", StringComparison.Ordinal));
+    var zadOk = badResult.Warnings.All(w => !w.Contains("zad Dy=", StringComparison.Ordinal));
+    if (celoWarn != null && celoWarn.Contains("očakávané 215", StringComparison.Ordinal) && zadOk)
+        Pass("SufelRozmery – výstraha pri nesúladnom čele (dno 18 mm)");
+    else
+        Fail("SufelRozmery – nesúlad čelo", celoWarn ?? string.Join("; ", badResult.Warnings));
+}
+
+// --- 17. VzoryXcs súbor na disku ---
 {
     var repoRoot = FindRepoRoot();
     var vzorPath = Path.Combine(repoRoot, "VzoryXcs", "Polica-pevna.txt");

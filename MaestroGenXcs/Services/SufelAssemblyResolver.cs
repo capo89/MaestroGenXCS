@@ -99,6 +99,8 @@ public static class SufelAssemblyResolver
         foreach (var sk in ctx.SufelSkupiny)
         {
             BindSkupina(sk);
+            ValidateRoleKs(zostava, sk, warnings);
+            SufelRozmeryValidator.ValidateSkupina(zostava, sk, warnings);
             if (!sk.JeKompletna)
                 warnings.Add($"Zostava „{zostava}“ – {sk.Nazov}: nekompletná šufľa.");
         }
@@ -163,7 +165,6 @@ public static class SufelAssemblyResolver
         sk.ZadPart = PickPrimary(bucket.Zady);
         sk.DnoPart = PickPrimary(bucket.Dna);
 
-        ValidateRoleKs(zostava, sk, warnings);
         ctx.SufelSkupiny.Add(sk);
     }
 
